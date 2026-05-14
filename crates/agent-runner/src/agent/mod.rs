@@ -1,6 +1,7 @@
 pub mod message;
 
-pub use message::{FinishReason, LlmResponse, Message, Role, TokenUsage, ToolCall, ToolResult};
+pub use message::{FinishReason, LlmResponse, Message, Role, ToolCall, ToolResult};
+use trailhead_core::types::TokenUsage;
 
 use crate::provider::{LlmProvider, RequestConfig};
 use crate::tools::{ToolContext, ToolRegistry};

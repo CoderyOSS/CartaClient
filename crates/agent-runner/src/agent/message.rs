@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use trailhead_core::types::TokenUsage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -28,6 +29,8 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -38,6 +41,7 @@ impl Message {
         Self {
             role: Role::System,
             content: Some(content.into()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -47,6 +51,7 @@ impl Message {
         Self {
             role: Role::User,
             content: Some(content.into()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -56,6 +61,7 @@ impl Message {
         Self {
             role: Role::Assistant,
             content: Some(content.into()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
         }
@@ -68,7 +74,22 @@ impl Message {
         Self {
             role: Role::Assistant,
             content,
+            reasoning_content: None,
             tool_calls: Some(tool_calls),
+            tool_call_id: None,
+        }
+    }
+
+    pub fn assistant_with_reasoning(
+        content: Option<String>,
+        reasoning_content: Option<String>,
+        tool_calls: Option<Vec<ToolCall>>,
+    ) -> Self {
+        Self {
+            role: Role::Assistant,
+            content,
+            reasoning_content,
+            tool_calls,
             tool_call_id: None,
         }
     }
@@ -77,6 +98,7 @@ impl Message {
         Self {
             role: Role::Tool,
             content: Some(content.into()),
+            reasoning_content: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
         }
@@ -98,38 +120,4 @@ pub struct LlmResponse {
     pub usage: TokenUsage,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenUsage {
-    pub prompt_tokens: u64,
-    pub completion_tokens: u64,
-    pub total_tokens: u64,
-}
 
-impl TokenUsage {
-    pub fn zero() -> Self {
-        Self {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-        }
-    }
-
-    pub fn new(prompt_tokens: u64, completion_tokens: u64) -> Self {
-        Self {
-            prompt_tokens,
-            completion_tokens,
-            total_tokens: prompt_tokens + completion_tokens,
-        }
-    }
-}
-
-impl std::ops::Add for TokenUsage {
-    type Output = TokenUsage;
-
-    fn add(self, rhs: TokenUsage) -> TokenUsage {
-        TokenUsage::new(
-            self.prompt_tokens + rhs.prompt_tokens,
-            self.completion_tokens + rhs.completion_tokens,
-        )
-    }
-}

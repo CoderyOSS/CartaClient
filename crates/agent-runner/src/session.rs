@@ -1,4 +1,4 @@
-use crate::agent::TokenUsage;
+use trailhead_core::types::TokenUsage;
 use crate::agent::Message;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
