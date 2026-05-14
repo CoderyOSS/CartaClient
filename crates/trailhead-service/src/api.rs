@@ -11,6 +11,12 @@ use crate::config::TrailheadConfig;
 use crate::db::Database;
 
 #[derive(Deserialize)]
+struct CreateWorkerRequest {
+    job_id: String,
+    provider: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct RegisterRequest {
     job_id: String,
 }
@@ -78,6 +84,7 @@ type AppState = (Arc<Database>, Arc<TrailheadConfig>);
 
 pub fn api_routes(db: Arc<Database>, config: Arc<TrailheadConfig>) -> Router {
     Router::new()
+        .route("/api/v1/workers", post(create_worker))
         .route("/api/v1/workers/{id}/register", post(register_worker))
         .route("/api/v1/workers/{id}/heartbeat", post(heartbeat))
         .route("/api/v1/workers/{id}/checkpoint", post(checkpoint))
@@ -86,6 +93,17 @@ pub fn api_routes(db: Arc<Database>, config: Arc<TrailheadConfig>) -> Router {
         .route("/api/v1/jobs/{id}/config", get(job_config))
         .route("/api/v1/jobs/{id}/skill/{name}", get(skill_content))
         .with_state((db, config))
+}
+
+async fn create_worker(
+    State((db, _config)): State<AppState>,
+    Json(body): Json<CreateWorkerRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let provider = body.provider.as_deref().unwrap_or("test");
+    db.create_worker(&id, &body.job_id, provider)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({"worker_id": id})))
 }
 
 async fn register_worker(

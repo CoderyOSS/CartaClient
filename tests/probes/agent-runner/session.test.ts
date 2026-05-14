@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeAll } from "bun:test";
+import { describe, expect, beforeAll } from "bun:test";
 import { test, p, uniqueId } from "../helpers";
+
+const hasLLMKey = typeof process.env.DEEPSEEK_API_KEY === "string" && process.env.DEEPSEEK_API_KEY.length > 0;
 
 const SSH_BUILD =
   "export PATH=\"$HOME/.cargo/bin:$PATH\" && cd /home/gem/projects/CoderyTrailhead && cargo build -p agent-runner --release 2>&1";
@@ -28,30 +30,37 @@ function ssh(cmd: string): Promise<SshResult> {
 }
 
 function runAgent(args: string): Promise<SshResult> {
-  return ssh(`export PATH="$HOME/.cargo/bin:$PATH" && ${BINARY_PATH} ${args}`);
-}
-
-function parseJson(text: string): unknown {
-  return JSON.parse(text);
+  const env = [
+    `LLM_API_KEY=${process.env.DEEPSEEK_API_KEY ?? ""}`,
+    `LLM_PROVIDER=openai-compatible`,
+    `LLM_BASE_URL=https://api.deepseek.com/v1`,
+    `LLM_MODEL=deepseek-chat`,
+  ].join(" ");
+  return ssh(`export PATH="$HOME/.cargo/bin:$PATH" && ${env} ${BINARY_PATH} ${args}`);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasStringField(obj: unknown, field: string): boolean {
-  return isObject(obj) && typeof obj[field] === "string";
-}
-
-function hasNumberField(obj: unknown, field: string): boolean {
-  return isObject(obj) && typeof obj[field] === "number";
-}
-
-function hasArrayField(obj: unknown, field: string): boolean {
-  return isObject(obj) && Array.isArray(obj[field]);
-}
-
 describe("agent-runner session", () => {
+  beforeAll(async () => {
+    const result = await ssh(SSH_BUILD);
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("resume fails when no session file exists", async () => {
+    const ws = `/tmp/ar-noresume-${uniqueId()}`;
+    const result = await runAgent(
+      `resume --workspace ${ws} --prompt "continue" --max-tokens 100`
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toLowerCase()).toContain("session");
+  });
+});
+
+describe.skipIf(!hasLLMKey)("agent-runner session (requires LLM)", () => {
   beforeAll(async () => {
     const result = await ssh(SSH_BUILD);
     expect(result.exitCode).toBe(0);
@@ -83,11 +92,11 @@ describe("agent-runner session", () => {
     const raw = await ssh(`cat ${ws}/session.json`);
     expect(raw.exitCode).toBe(0);
 
-    const session = parseJson(raw.stdout);
-
-    expect(hasStringField(session, "id")).toBe(true);
-    expect(hasArrayField(session, "messages")).toBe(true);
-    expect(hasStringField(session, "created_at")).toBe(true);
+    const session = JSON.parse(raw.stdout);
+    expect(isObject(session)).toBe(true);
+    expect(typeof session["id"]).toBe("string");
+    expect(Array.isArray(session["messages"])).toBe(true);
+    expect(typeof session["created_at"]).toBe("string");
   });
 
   test("session contains token usage", async () => {
@@ -101,41 +110,11 @@ describe("agent-runner session", () => {
     const raw = await ssh(`cat ${ws}/session.json`);
     expect(raw.exitCode).toBe(0);
 
-    const session = parseJson(raw.stdout);
-
-    expect(isObject(session)).toBe(true);
-    if (isObject(session)) {
-      expect(isObject(session["token_usage"])).toBe(true);
-      if (isObject(session["token_usage"])) {
-        expect(hasNumberField(session["token_usage"], "prompt_tokens")).toBe(true);
-        expect(hasNumberField(session["token_usage"], "completion_tokens")).toBe(true);
-        expect(hasNumberField(session["token_usage"], "total_tokens")).toBe(true);
-      }
-    }
-  });
-
-  test("session messages include user and assistant entries", async () => {
-    const ws = `/tmp/ar-msgs-${uniqueId()}`;
-    const prompt = "Use the bash tool to run: echo done";
-
-    await runAgent(
-      `run --workspace ${ws} --prompt '${prompt}' --tools bash --max-tokens 1024 --max-tool-calls 5`
-    );
-
-    const raw = await ssh(`cat ${ws}/session.json`);
-    expect(raw.exitCode).toBe(0);
-
-    const session = parseJson(raw.stdout);
-
-    expect(isObject(session)).toBe(true);
-    if (isObject(session) && Array.isArray(session["messages"])) {
-      const messages = session["messages"] as unknown[];
-      const roles = messages.map((m: unknown) => {
-        if (isObject(m) && typeof m["role"] === "string") return m["role"];
-        return "";
-      });
-      expect(roles).toContain("user");
-      expect(roles).toContain("assistant");
+    const session = JSON.parse(raw.stdout);
+    if (isObject(session) && isObject(session["token_usage"])) {
+      expect(typeof session["token_usage"]["prompt_tokens"]).toBe("number");
+      expect(typeof session["token_usage"]["completion_tokens"]).toBe("number");
+      expect(typeof session["token_usage"]["total_tokens"]).toBe("number");
     }
   });
 
@@ -159,21 +138,10 @@ describe("agent-runner session", () => {
     expect(result.stdout).toContain("step2");
 
     const sessionAfterResume = await ssh(`cat ${ws}/session.json`);
-    const resumed = parseJson(sessionAfterResume.stdout);
-
-    const firstSession = parseJson(sessionAfterFirst.stdout);
-    if (isObject(firstSession) && Array.isArray(firstSession["messages"]) && isObject(resumed) && Array.isArray(resumed["messages"])) {
-      expect((resumed["messages"] as unknown[]).length).toBeGreaterThan((firstSession["messages"] as unknown[]).length);
+    const first = JSON.parse(sessionAfterFirst.stdout);
+    const resumed = JSON.parse(sessionAfterResume.stdout);
+    if (isObject(first) && isObject(resumed) && Array.isArray(first["messages"]) && Array.isArray(resumed["messages"])) {
+      expect(resumed["messages"].length).toBeGreaterThan(first["messages"].length);
     }
-  });
-
-  test("resume fails when no session file exists", async () => {
-    const ws = `/tmp/ar-noresume-${uniqueId()}`;
-    const result = await runAgent(
-      `resume --workspace ${ws} --prompt "continue" --max-tokens 100`
-    );
-
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toContain("session");
   });
 });

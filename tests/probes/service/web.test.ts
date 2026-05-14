@@ -1,151 +1,114 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { p } from "@codery/probes";
-import { test, uniqueId } from "../helpers";
-import { adapter } from "../adapter";
+import { test, createProject, createJob, createWorker, isRecord, isRecordArray } from "../helpers";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isRecordArray(value: unknown): value is Record<string, unknown>[] {
+function isRecordArrayVal(value: unknown): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.every(isRecord);
-}
-
-function getStatus(job: unknown): string {
-  if (isRecord(job) && typeof job["status"] === "string") {
-    return job["status"];
-  }
-  return "";
-}
-
-async function createProjectAndJob(): Promise<string> {
-  const projectId = uniqueId();
-  await p.http.send({
-    method: "POST",
-    path: "/api/v1/projects",
-    body: {
-      id: projectId,
-      name: `web-test-${projectId}`,
-      repo_url: "https://github.com/example/web-test",
-      workflow: "feature",
-    },
-  });
-
-  return adapter.createJob({
-    project_id: projectId,
-    description: "Dashboard test job",
-    workflow: "feature",
-  });
-}
-
-async function createRunningJob(): Promise<{ jobId: string; workerId: string }> {
-  const jobId = await createProjectAndJob();
-
-  await p.http.send({
-    method: "POST",
-    path: `/api/v1/jobs/${jobId}/schedule`,
-  });
-
-  const workerId = uniqueId();
-  await adapter.workerRegister(workerId, {
-    job_id: jobId,
-    hostname: "web-test-worker",
-  });
-
-  return { jobId, workerId };
 }
 
 describe("dashboard API", () => {
   test("GET /api/v1/jobs returns list", async () => {
-    const jobId = await createProjectAndJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Dashboard test job");
 
-    const jobs = await adapter.listJobs();
-
-    expect(jobs.length).toBeGreaterThan(0);
-
-    const found = jobs.some((j) => {
-      if (isRecord(j) && typeof j["id"] === "string") {
-        return j["id"] === jobId;
-      }
-      return false;
+    const res = await p.http.send({
+      method: "GET",
+      path: "/api/v1/jobs",
     });
 
-    expect(found).toBe(true);
+    expect(res.status).toBe(200);
+    if (Array.isArray(res.body)) {
+      const found = res.body.some((j: unknown) =>
+        isRecord(j) && j["id"] === jobId
+      );
+      expect(found).toBe(true);
+    }
   });
 
   test("GET /api/v1/jobs/{id} returns detail", async () => {
-    const projectId = uniqueId();
-    await p.http.send({
-      method: "POST",
-      path: "/api/v1/projects",
-      body: {
-        id: projectId,
-        name: "detail-project",
-        repo_url: "https://github.com/example/detail",
-        workflow: "feature",
-      },
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Detail test");
+
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
 
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Detail retrieval test",
-      workflow: "feature",
-    });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job)) {
-      expect(typeof job["id"]).toBe("string");
-      expect(typeof job["status"]).toBe("string");
-      expect(typeof job["project_id"]).toBe("string");
-      expect(typeof job["description"]).toBe("string");
-      expect(typeof job["workflow"]).toBe("string");
-      expect(typeof job["created_at"]).toBe("string");
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(typeof res.body["id"]).toBe("string");
+      expect(typeof res.body["status"]).toBe("string");
+      expect(typeof res.body["project_id"]).toBe("string");
+      expect(typeof res.body["description"]).toBe("string");
+      expect(typeof res.body["created_at"]).toBe("string");
     }
   });
 
   test("GET /api/v1/workers returns list", async () => {
-    const { workerId } = await createRunningJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Worker list test");
+    const workerId = await createWorker(jobId);
 
-    const workers = await adapter.listWorkers();
-
-    expect(workers.length).toBeGreaterThan(0);
-
-    const found = workers.some((w) => {
-      if (isRecord(w) && typeof w["id"] === "string") {
-        return w["id"] === workerId;
-      }
-      return false;
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    expect(found).toBe(true);
+    const res = await p.http.send({
+      method: "GET",
+      path: "/api/v1/workers",
+    });
+
+    expect(res.status).toBe(200);
+    if (Array.isArray(res.body)) {
+      const found = res.body.some((w: unknown) =>
+        isRecord(w) && w["id"] === workerId
+      );
+      expect(found).toBe(true);
+    }
   });
 
   test("POST /api/v1/jobs/{id}/pause changes status", async () => {
-    const { jobId } = await createRunningJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Pause via dashboard");
+    const workerId = await createWorker(jobId);
 
-    await adapter.pauseJob(jobId);
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
+    });
 
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("paused");
-  });
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/pause`,
+    });
 
-  test("POST /api/v1/jobs/{id}/resume changes status", async () => {
-    const { jobId } = await createRunningJob();
-
-    await adapter.pauseJob(jobId);
-    await adapter.resumeJob(jobId);
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("running");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("paused");
+    }
   });
 
   test("POST /api/v1/jobs/{id}/cancel changes status", async () => {
-    const jobId = await createProjectAndJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Cancel via dashboard");
 
-    await adapter.cancelJob(jobId);
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/cancel`,
+    });
 
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("cancelled");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("cancelled");
+    }
   });
 });

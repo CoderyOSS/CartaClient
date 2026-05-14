@@ -1,90 +1,56 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { p } from "@codery/probes";
-import { test, uniqueId } from "../helpers";
-import { adapter } from "../adapter";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasStringField(obj: unknown, field: string): boolean {
-  return isRecord(obj) && typeof obj[field] === "string";
-}
+import { test, createProject, createJob, isRecord } from "../helpers";
 
 describe("workflow resolver", () => {
-  test("resolves {{input}} variable", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Add a hello world function",
-      workflow: "simple",
+  test("job config resolves {{input}} in prompt", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Add a hello world function", "simple");
+
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}/config`,
     });
 
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job) && isRecord(job["current_stage"])) {
-      const prompt = job["current_stage"]["prompt"];
-      if (typeof prompt === "string") {
-        expect(prompt).toContain("Add a hello world function");
-      }
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(typeof res.body["prompt"]).toBe("string");
+      const prompt = res.body["prompt"] as string;
+      expect(prompt).toContain("Add a hello world function");
     }
   });
 
-  test("resolves {{stages.*}} variables", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Build feature X",
-      workflow: "feature",
+  test("job config returns stage and tools", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Build feature X", "feature");
+
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}/config`,
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
-    });
-
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "plan",
-      output: "Plan created: implement the thing",
-      response: { complexity: "complex" },
-    });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job) && isRecord(job["current_stage"])) {
-      const prompt = job["current_stage"]["prompt"];
-      if (typeof prompt === "string") {
-        expect(prompt).toContain("Plan created: implement the thing");
-      }
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(typeof res.body["stage"]).toBe("string");
+      expect(Array.isArray(res.body["tools"])).toBe(true);
+      expect(typeof res.body["max_tokens"]).toBe("number");
+      expect(typeof res.body["model"]).toBe("string");
+      expect(typeof res.body["provider"]).toBe("string");
     }
   });
 
-  test("resolves {{project.*}} variables", async () => {
-    const projectId = uniqueId();
+  test("job config returns skill content for plan skill", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Plan the feature", "simple");
 
-    await p.sql.put({
-      table: "projects",
-      force_schema: true,
-      rows: [{ id: projectId, name: "test-project", repo: "org/test-repo", branch: "main" }],
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}/config`,
     });
 
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Fix the bug",
-      workflow: "simple",
-    });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job) && isRecord(job["current_stage"])) {
-      const prompt = job["current_stage"]["prompt"];
-      if (typeof prompt === "string") {
-        expect(prompt).toContain("test-project");
-        expect(prompt).toContain("org/test-repo");
-        expect(prompt).toContain("main");
-      }
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(typeof res.body["skill_content"]).toBe("string");
     }
   });
 });

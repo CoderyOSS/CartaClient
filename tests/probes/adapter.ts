@@ -1,12 +1,14 @@
 import { p } from "@codery/probes";
 
 export interface ServiceAdapter {
-  createJob(params: { project_id: string; description: string; workflow: string }): Promise<string>;
+  createProject(params: { repo_url: string; branch?: string }): Promise<string>;
+  createJob(params: { project_id: string; description: string; workflow?: string }): Promise<string>;
   getJob(jobId: string): Promise<Record<string, unknown>>;
   listJobs(): Promise<Record<string, unknown>[]>;
   cancelJob(jobId: string): Promise<void>;
   pauseJob(jobId: string): Promise<void>;
   resumeJob(jobId: string): Promise<void>;
+  createWorker(params: { job_id: string; provider?: string }): Promise<string>;
   listWorkers(): Promise<Record<string, unknown>[]>;
   workerRegister(workerId: string, body: Record<string, unknown>): Promise<void>;
   workerHeartbeat(workerId: string, body: Record<string, unknown>): Promise<void>;
@@ -23,21 +25,30 @@ function isRecordArray(value: unknown): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.every(isRecord);
 }
 
-function extractId(body: unknown): string {
-  if (isRecord(body) && typeof body["id"] === "string") {
-    return body["id"];
+function extractField(body: unknown, field: string): string {
+  if (isRecord(body) && typeof body[field] === "string") {
+    return body[field];
   }
-  throw new Error("Expected response with string id");
+  throw new Error(`Expected response with string ${field}, got: ${JSON.stringify(body)}`);
 }
 
 export const adapter: ServiceAdapter = {
+  async createProject(params) {
+    const res = await p.http.send({
+      method: "POST",
+      path: "/api/v1/projects",
+      body: { name: `test-${Date.now()}`, ...params },
+    });
+    return extractField(res.body, "project_id");
+  },
+
   async createJob(params) {
     const res = await p.http.send({
       method: "POST",
       path: "/api/v1/jobs",
       body: params,
     });
-    return extractId(res.body);
+    return extractField(res.body, "job_id");
   },
 
   async getJob(jobId) {
@@ -77,6 +88,15 @@ export const adapter: ServiceAdapter = {
       method: "POST",
       path: `/api/v1/jobs/${jobId}/resume`,
     });
+  },
+
+  async createWorker(params) {
+    const res = await p.http.send({
+      method: "POST",
+      path: "/api/v1/workers",
+      body: params,
+    });
+    return extractField(res.body, "worker_id");
   },
 
   async listWorkers() {

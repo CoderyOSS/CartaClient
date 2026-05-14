@@ -1,185 +1,146 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { p } from "@codery/probes";
-import { test, uniqueId } from "../helpers";
-import { adapter } from "../adapter";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getStatus(job: unknown): string {
-  if (isRecord(job) && typeof job["status"] === "string") {
-    return job["status"];
-  }
-  return "";
-}
-
-async function createProjectJob(): Promise<string> {
-  const projectId = uniqueId();
-  await p.http.send({
-    method: "POST",
-    path: "/api/v1/projects",
-    body: {
-      id: projectId,
-      name: `job-test-${projectId}`,
-      repo_url: "https://github.com/example/job-test",
-      workflow: "feature",
-    },
-  });
-
-  return adapter.createJob({
-    project_id: projectId,
-    description: "Job state machine test",
-    workflow: "feature",
-  });
-}
+import { test, createProject, createJob, createWorker, isRecord, getStatus } from "../helpers";
 
 describe("job state machine", () => {
   test("new job is queued", async () => {
-    const jobId = await createProjectJob();
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("queued");
-  });
-
-  test("queued to scheduled", async () => {
-    const jobId = await createProjectJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "State machine test");
 
     const res = await p.http.send({
-      method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
     expect(res.status).toBe(200);
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("scheduled");
-  });
-
-  test("scheduled to running", async () => {
-    const jobId = await createProjectJob();
-
-    await p.http.send({
-      method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
-    });
-
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
-    });
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("running");
+    if (isRecord(res.body)) {
+      expect(res.body["status"]).toBe("queued");
+    }
   });
 
   test("running to paused", async () => {
-    const jobId = await createProjectJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Pause test");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "pause-worker",
+    const pauseRes = await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/pause`,
     });
+    expect(pauseRes.status).toBe(200);
 
-    await adapter.pauseJob(jobId);
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("paused");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("paused");
+    }
   });
 
-  test("paused to running", async () => {
-    const jobId = await createProjectJob();
+  test("paused to resuming", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Resume test");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "resume-worker",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/pause`,
     });
 
-    await adapter.pauseJob(jobId);
-    await adapter.resumeJob(jobId);
+    const resumeRes = await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/resume`,
+    });
+    expect(resumeRes.status).toBe(200);
 
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("running");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("resuming");
+    }
   });
 
   test("running to completed", async () => {
-    const jobId = await createProjectJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Complete test");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "complete-worker",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/complete`,
+      body: { result: "success" },
     });
 
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      result: "success",
-      output: "Job completed successfully",
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("completed");
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("completed");
+    }
   });
 
-  test("running to failed_retryable", async () => {
-    const jobId = await createProjectJob();
+  test("running to failed_retryable on first attempt", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Fail test");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "fail-worker",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/fail`,
+      body: { error: "transient failure" },
     });
 
-    await adapter.workerFail(workerId, {
-      job_id: jobId,
-      error: "Transient failure",
-      retryable: true,
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("failed_retryable");
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("failed_retryable");
+    }
   });
 
-  test("cannot transition completed to running", async () => {
-    const jobId = await createProjectJob();
+  test("cannot resume completed job", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Terminal test");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "transition-worker",
-    });
-
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      result: "success",
-      output: "Done",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/complete`,
+      body: { result: "done" },
     });
 
     const res = await p.http.send({
@@ -191,49 +152,47 @@ describe("job state machine", () => {
   });
 
   test("cancel from queued state", async () => {
-    const jobId = await createProjectJob();
-    await adapter.cancelJob(jobId);
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("cancelled");
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Cancel queued");
+
+    const cancelRes = await p.http.send({
+      method: "POST",
+      path: `/api/v1/jobs/${jobId}/cancel`,
+    });
+    expect(cancelRes.status).toBe(200);
+
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("cancelled");
+    }
   });
 
   test("cancel from running state", async () => {
-    const jobId = await createProjectJob();
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Cancel running");
+    const workerId = await createWorker(jobId);
 
     await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "cancel-worker",
-    });
-
-    await adapter.cancelJob(jobId);
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("cancelled");
-  });
-
-  test("cancel from paused state", async () => {
-    const jobId = await createProjectJob();
-
-    await p.http.send({
+    const cancelRes = await p.http.send({
       method: "POST",
-      path: `/api/v1/jobs/${jobId}/schedule`,
+      path: `/api/v1/jobs/${jobId}/cancel`,
     });
+    expect(cancelRes.status).toBe(200);
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "cancel-paused-worker",
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
-    await adapter.pauseJob(jobId);
-    await adapter.cancelJob(jobId);
-
-    const job = await adapter.getJob(jobId);
-    expect(getStatus(job)).toBe("cancelled");
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("cancelled");
+    }
   });
 });

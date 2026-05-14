@@ -131,7 +131,8 @@ async fn run_command() -> Result<()> {
 
         let output = agent::run_agent_loop(provider.as_ref(), &registry, config, tool_ctx).await?;
 
-        let _session = Session::new(output.messages.clone(), output.usage);
+        let session = Session::new(output.messages.clone(), output.usage);
+        session.save(&ws)?;
 
         if let Some(last) = output.messages.last() {
             if let Some(content) = &last.content {

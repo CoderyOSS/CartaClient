@@ -10,13 +10,16 @@ use futures_util::StreamExt;
 use super::{WorkerHandle, WorkerProvider, WorkerSpec};
 
 pub struct DockerProvider {
-    docker: Docker,
+    docker: Option<Docker>,
     network: String,
 }
 
 impl DockerProvider {
     pub fn new() -> Result<Self> {
-        let docker = Docker::connect_with_local_defaults().context("connect to Docker")?;
+        let docker = match Docker::connect_with_local_defaults() {
+            Ok(d) => Some(d),
+            Err(_) => None,
+        };
         Ok(Self {
             docker,
             network: "codery-net".into(),
@@ -32,6 +35,9 @@ impl DockerProvider {
 #[async_trait]
 impl WorkerProvider for DockerProvider {
     async fn create_worker(&self, spec: &WorkerSpec) -> Result<WorkerHandle> {
+        let docker = self.docker.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
+
         let container_name = format!("trailhead-worker-{}", spec.job_id);
 
         let mut env = vec![
@@ -68,13 +74,12 @@ impl WorkerProvider for DockerProvider {
             platform: None,
         };
 
-        let result = self
-            .docker
+        let result = docker
             .create_container(Some(create_opts), config)
             .await
             .context("create container")?;
 
-        self.docker
+        docker
             .start_container(&result.id, None::<StartContainerOptions<String>>)
             .await
             .context("start container")?;
@@ -88,8 +93,10 @@ impl WorkerProvider for DockerProvider {
     }
 
     async fn destroy_worker(&self, id: &str) -> Result<()> {
-        let _ = self.docker.stop_container(id, None).await;
-        self.docker
+        let docker = self.docker.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
+        let _ = docker.stop_container(id, None).await;
+        docker
             .remove_container(
                 id,
                 Some(RemoveContainerOptions {
@@ -103,8 +110,9 @@ impl WorkerProvider for DockerProvider {
     }
 
     async fn get_status(&self, id: &str) -> Result<trailhead_core::types::WorkerStatus> {
-        let info = self
-            .docker
+        let docker = self.docker.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
+        let info = docker
             .inspect_container(id, None)
             .await
             .context("inspect container")?;
@@ -128,13 +136,15 @@ impl WorkerProvider for DockerProvider {
     }
 
     async fn get_logs(&self, id: &str, tail: usize) -> Result<String> {
+        let docker = self.docker.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
         let options = LogsOptions {
             stdout: true,
             stderr: true,
             tail: tail.to_string(),
             ..Default::default()
         };
-        let mut stream = self.docker.logs(id, Some(options));
+        let mut stream = docker.logs(id, Some(options));
         let mut logs = String::new();
         while let Some(chunk) = stream.next().await {
             match chunk {
@@ -151,8 +161,9 @@ impl WorkerProvider for DockerProvider {
     }
 
     async fn list_workers(&self) -> Result<Vec<WorkerHandle>> {
-        let containers = self
-            .docker
+        let docker = self.docker.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Docker not available"))?;
+        let containers = docker
             .list_containers::<String>(None)
             .await
             .context("list containers")?;

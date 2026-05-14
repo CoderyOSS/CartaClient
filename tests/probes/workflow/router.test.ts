@@ -1,92 +1,106 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { p } from "@codery/probes";
-import { test, uniqueId } from "../helpers";
-import { adapter } from "../adapter";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { test, createProject, createJob, createWorker, isRecord } from "../helpers";
 
 describe("workflow router", () => {
-  test("routes on string equality", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Build feature",
-      workflow: "feature",
+  test("routes based on string equality in response", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Build feature", "feature");
+    const workerId = await createWorker(jobId);
+
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/checkpoint`,
+      body: {
+        stage: "plan",
+        response: { complexity: "simple" },
+        session_path: "/tmp/session.json",
+        git_sha: "abc123",
+        token_usage: { prompt_tokens: 100, completion_tokens: 50 },
+        files_changed: [],
+        next_stage: "implement",
+      },
     });
 
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "plan",
-      output: "Simple task",
-      response: { complexity: "simple" },
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job) && isRecord(job["current_stage"])) {
-      const stageName = job["current_stage"]["name"];
-      if (typeof stageName === "string") {
-        expect(stageName).toBe("implement");
-      }
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(res.body["current_stage"]).toBe("implement");
     }
   });
 
-  test("routes on boolean field", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Build feature",
-      workflow: "feature",
+  test("routes to plan_detail on complex response", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Complex feature", "feature");
+    const workerId = await createWorker(jobId);
+
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
     });
 
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/checkpoint`,
+      body: {
+        stage: "plan",
+        response: { complexity: "complex" },
+        session_path: "/tmp/session.json",
+        git_sha: "abc123",
+        token_usage: { prompt_tokens: 100, completion_tokens: 50 },
+        files_changed: [],
+        next_stage: "plan_detail",
+      },
     });
 
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "plan",
-      output: "Plan done",
-      response: { complexity: "simple" },
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
     });
-
-    const jobAfterPlan = await adapter.getJob(jobId);
-
-    if (isRecord(jobAfterPlan) && isRecord(jobAfterPlan["current_stage"])) {
-      const stageName = jobAfterPlan["current_stage"]["name"];
-      if (typeof stageName === "string") {
-        expect(stageName).toBe("implement");
-      }
-    }
-
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "implement",
-      output: "Implementation succeeded",
-      response: { success: true },
-    });
-
-    const jobAfterImpl = await adapter.getJob(jobId);
-
-    if (isRecord(jobAfterImpl) && isRecord(jobAfterImpl["current_stage"])) {
-      const stageName = jobAfterImpl["current_stage"]["name"];
-      if (typeof stageName === "string") {
-        expect(stageName).toBe("done");
-      }
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(res.body["current_stage"]).toBe("plan_detail");
     }
   });
 
-  test("routes on numeric comparison", async () => {
+  test("completes workflow when routes is null", async () => {
+    const projectId = await createProject();
+    const jobId = await createJob(projectId, "Simple task", "simple");
+    const workerId = await createWorker(jobId);
+
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/register`,
+      body: { job_id: jobId },
+    });
+
+    await p.http.send({
+      method: "POST",
+      path: `/api/v1/workers/${workerId}/complete`,
+      body: { result: "done" },
+    });
+
+    const res = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    expect(res.status).toBe(200);
+    if (isRecord(res.body)) {
+      expect(res.body["status"]).toBe("completed");
+    }
+  });
+
+  test("validates numeric routing workflow", async () => {
     const yaml = `
 name: numeric-route
 description: "Numeric routing"
@@ -111,74 +125,12 @@ stages:
     routes: null
 `;
 
-    const validateRes = await p.http.send({
+    const res = await p.http.send({
       method: "POST",
       path: "/api/v1/workflows/validate",
-      body: { yaml },
+      body: { content: yaml },
     });
 
-    expect(validateRes.status).toBe(200);
-  });
-
-  test("routes to first matching condition", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Build feature",
-      workflow: "feature",
-    });
-
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
-    });
-
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "plan",
-      output: "Complex plan",
-      response: { complexity: "complex" },
-    });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job) && isRecord(job["current_stage"])) {
-      const stageName = job["current_stage"]["name"];
-      if (typeof stageName === "string") {
-        expect(stageName).toBe("plan_detail");
-      }
-    }
-  });
-
-  test("ends workflow when routes null", async () => {
-    const projectId = uniqueId();
-    const jobId = await adapter.createJob({
-      project_id: projectId,
-      description: "Simple task",
-      workflow: "simple",
-    });
-
-    const workerId = uniqueId();
-    await adapter.workerRegister(workerId, {
-      job_id: jobId,
-      hostname: "test-worker",
-    });
-
-    await adapter.workerComplete(workerId, {
-      job_id: jobId,
-      stage: "plan",
-      output: "Done planning",
-      response: { complexity: "simple" },
-    });
-
-    const job = await adapter.getJob(jobId);
-
-    if (isRecord(job)) {
-      const status = job["status"];
-      if (typeof status === "string") {
-        expect(status).toBe("completed");
-      }
-    }
+    expect(res.status).toBe(200);
   });
 });

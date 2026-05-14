@@ -2,13 +2,14 @@ proof:
   output: "proof-records.md"
   title: "Trailhead E2E Test Suite"
 
+launcher:
+  command: "./launcher.sh"
+  ready_after_ms: 3000
+
 interfaces:
   http:
     client:
-      base_url: "http://localhost:4050"
-  sql:
-    path: "./data/test.db"
-    reset_on_start: true
+      base_url: "http://172.18.0.3:4050"
   fs:
     root: "./test-workspace"
     reset_on_start: true

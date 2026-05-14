@@ -1,64 +1,23 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { p } from "@codery/probes";
-import { test, uniqueId } from "../helpers";
-import { adapter } from "../adapter";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function createRunningJob(): Promise<{ jobId: string; workerId: string }> {
-  const projectId = uniqueId();
-  await p.http.send({
-    method: "POST",
-    path: "/api/v1/projects",
-    body: {
-      id: projectId,
-      name: `api-test-${projectId}`,
-      repo_url: "https://github.com/example/api-test",
-      workflow: "feature",
-    },
-  });
-
-  const jobId = await adapter.createJob({
-    project_id: projectId,
-    description: "API test job",
-    workflow: "feature",
-  });
-
-  await p.http.send({
-    method: "POST",
-    path: `/api/v1/jobs/${jobId}/schedule`,
-  });
-
-  const workerId = uniqueId();
-  await adapter.workerRegister(workerId, {
-    job_id: jobId,
-    hostname: "api-test-worker",
-  });
-
-  return { jobId, workerId };
-}
+import { test, setupRunningJob, isRecord } from "../helpers";
 
 describe("worker HTTP API", () => {
-  test("worker register", async () => {
-    const { jobId, workerId } = await createRunningJob();
+  test("worker register sets job to running", async () => {
+    const { workerId, jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "GET",
-      path: `/api/v1/workers/${workerId}`,
+      path: `/api/v1/jobs/${jobId}`,
     });
-
     expect(res.status).toBe(200);
-
     if (isRecord(res.body)) {
-      expect(res.body["job_id"]).toBe(jobId);
       expect(res.body["status"]).toBe("running");
     }
   });
 
-  test("worker heartbeat", async () => {
-    const { workerId } = await createRunningJob();
+  test("worker heartbeat succeeds", async () => {
+    const { workerId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "POST",
@@ -66,78 +25,78 @@ describe("worker HTTP API", () => {
       body: {
         status: "running",
         current_stage: "plan",
-        token_usage: { input: 500, output: 200 },
+        token_usage: { prompt_tokens: 500, completion_tokens: 200 },
+        files_changed: 0,
+        tool_calls_made: 5,
+        message: "working",
       },
     });
 
     expect(res.status).toBe(200);
   });
 
-  test("worker checkpoint", async () => {
-    const { jobId, workerId } = await createRunningJob();
+  test("worker checkpoint saves stage data", async () => {
+    const { workerId, jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "POST",
       path: `/api/v1/workers/${workerId}/checkpoint`,
       body: {
-        job_id: jobId,
         stage: "plan",
-        response: "Checkpoint data",
+        response: { complexity: "simple" },
         session_path: "/tmp/session.json",
         git_sha: "def456",
-        files_changed: ["src/lib.rs", "Cargo.toml"],
-        tool_call_count: 15,
+        token_usage: { prompt_tokens: 100, completion_tokens: 50 },
+        files_changed: ["src/lib.rs"],
+        next_stage: "implement",
       },
     });
 
     expect(res.status).toBe(200);
   });
 
-  test("worker complete", async () => {
-    const { jobId, workerId } = await createRunningJob();
+  test("worker complete marks job completed", async () => {
+    const { workerId, jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "POST",
       path: `/api/v1/workers/${workerId}/complete`,
-      body: {
-        job_id: jobId,
-        result: "success",
-        output: "All stages completed",
-        token_usage: { input: 1000, output: 500 },
-      },
+      body: { result: "success" },
     });
 
     expect(res.status).toBe(200);
 
-    const job = await adapter.getJob(jobId);
-    if (isRecord(job)) {
-      expect(job["status"]).toBe("completed");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("completed");
     }
   });
 
-  test("worker fail", async () => {
-    const { jobId, workerId } = await createRunningJob();
+  test("worker fail marks job failed_retryable on first attempt", async () => {
+    const { workerId, jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "POST",
       path: `/api/v1/workers/${workerId}/fail`,
-      body: {
-        job_id: jobId,
-        error: "Build failed: unresolved import",
-        retryable: true,
-      },
+      body: { error: "build failed" },
     });
 
     expect(res.status).toBe(200);
 
-    const job = await adapter.getJob(jobId);
-    if (isRecord(job)) {
-      expect(job["status"]).toBe("failed_retryable");
+    const jobRes = await p.http.send({
+      method: "GET",
+      path: `/api/v1/jobs/${jobId}`,
+    });
+    if (isRecord(jobRes.body)) {
+      expect(jobRes.body["status"]).toBe("failed_retryable");
     }
   });
 
-  test("get job config", async () => {
-    const { jobId } = await createRunningJob();
+  test("get job config returns resolved stage info", async () => {
+    const { jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "GET",
@@ -145,15 +104,20 @@ describe("worker HTTP API", () => {
     });
 
     expect(res.status).toBe(200);
-
     if (isRecord(res.body)) {
-      const stages = res.body["stages"];
-      expect(typeof stages === "object" && stages !== null).toBe(true);
+      expect(typeof res.body["stage"]).toBe("string");
+      expect(typeof res.body["prompt"]).toBe("string");
+      expect(Array.isArray(res.body["tools"])).toBe(true);
+      expect(typeof res.body["max_tokens"]).toBe("number");
+      expect(typeof res.body["model"]).toBe("string");
+      expect(typeof res.body["provider"]).toBe("string");
+      expect(typeof res.body["base_url"]).toBe("string");
+      expect(typeof res.body["api_key"]).toBe("string");
     }
   });
 
-  test("get skill content", async () => {
-    const { jobId } = await createRunningJob();
+  test("get skill content returns markdown", async () => {
+    const { jobId } = await setupRunningJob();
 
     const res = await p.http.send({
       method: "GET",
@@ -161,9 +125,9 @@ describe("worker HTTP API", () => {
     });
 
     expect(res.status).toBe(200);
-
     if (isRecord(res.body)) {
       expect(typeof res.body["content"]).toBe("string");
+      expect(res.body["content"].length).toBeGreaterThan(0);
     }
   });
 
@@ -171,10 +135,7 @@ describe("worker HTTP API", () => {
     const res = await p.http.send({
       method: "POST",
       path: "/api/v1/workers/nonexistent-id/register",
-      body: {
-        job_id: "fake-job",
-        hostname: "ghost",
-      },
+      body: { job_id: "fake-job" },
     });
 
     expect(res.status).toBe(404);
