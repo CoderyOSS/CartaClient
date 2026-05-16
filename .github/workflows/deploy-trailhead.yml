@@ -19,22 +19,36 @@ jobs:
 
       - name: Deploy to VPS
         env:
-          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          trap 'rm -f /tmp/deploy_key' EXIT
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          SSH="ssh -i /tmp/deploy_key -o StrictHostKeyChecking=accept-new deploy@${DEPLOY_HOST}"
+          SCP="scp -i /tmp/deploy_key -o StrictHostKeyChecking=accept-new"
 
           SHA=$(git rev-parse --short HEAD)
           BINARY="target/release/trailhead-service"
 
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "$BINARY" "$VPS_USER@$VPS_HOST:/opt/codery/trailhead/bin/trailhead-service-$SHA"
+          $SSH "sudo mkdir -p /opt/codery/trailhead/bin /opt/codery/trailhead/skills /opt/codery/trailhead/workflows"
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "$VPS_USER@$VPS_HOST" <<EOF
-            ln -sf /opt/codery/trailhead/bin/trailhead-service-$SHA /opt/codery/trailhead/bin/current
-            sudo supervisorctl restart trailhead
-          EOF
+          $SCP "$BINARY" "deploy@${DEPLOY_HOST}:/tmp/trailhead-service-$SHA"
+          $SSH "sudo mv /tmp/trailhead-service-$SHA /opt/codery/trailhead/bin/trailhead-service-$SHA && sudo chmod +x /opt/codery/trailhead/bin/trailhead-service-$SHA"
+          $SSH "sudo ln -sf /opt/codery/trailhead/bin/trailhead-service-$SHA /opt/codery/trailhead/bin/current"
+
+          $SSH "test -f /opt/codery/trailhead/trailhead.toml || printf 'model = \"anthropic/claude-sonnet-4-20250514\"\\n\\n[provider.anthropic]\\napi = \"anthropic\"\\nenv = [\"ANTHROPIC_API_KEY\"]\\n' | sudo tee /opt/codery/trailhead/trailhead.toml"
+
+          for f in crates/trailhead-service/skills/*.md; do
+            $SCP "$f" "deploy@${DEPLOY_HOST}:/tmp/$(basename "$f")"
+            $SSH "sudo mv /tmp/$(basename "$f") /opt/codery/trailhead/skills/"
+          done
+
+          for f in crates/trailhead-service/workflows/*.yaml; do
+            $SCP "$f" "deploy@${DEPLOY_HOST}:/tmp/$(basename "$f")"
+            $SSH "sudo mv /tmp/$(basename "$f") /opt/codery/trailhead/workflows/"
+          done
+
+          $SSH "test -f /etc/supervisor/conf.d/trailhead.conf || printf '[program:trailhead]\\ncommand=/opt/codery/trailhead/bin/current daemon --db /opt/codery/trailhead.db --config /opt/codery/trailhead/trailhead.toml\\nuser=root\\nautostart=true\\nautorestart=true\\npriority=50\\nstdout_logfile=/var/log/supervisor/trailhead.log\\nstdout_logfile_maxbytes=10MB\\nstdout_logfile_backups=3\\nstderr_logfile=/var/log/supervisor/trailhead.log\\nstderr_logfile_maxbytes=10MB\\nstderr_logfile_backups=3\\n' | sudo tee /etc/supervisor/conf.d/trailhead.conf"
+
+          $SSH "sudo supervisorctl reread && sudo supervisorctl update"
+          $SSH "sudo supervisorctl restart trailhead"
