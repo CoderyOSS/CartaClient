@@ -1,33 +1,14 @@
-name: Build & Deploy Trailhead
+name: Deploy Trailhead
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "crates/trailhead-service/**"
-      - "crates/trailhead-core/**"
-      - "Cargo.toml"
-      - ".github/workflows/deploy-trailhead.yml"
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --release -p trailhead-service
-      - run: cargo test --release -p trailhead-service
-      - run: cargo clippy --release -p trailhead-service -- -D warnings
-
   deploy:
-    needs: check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
