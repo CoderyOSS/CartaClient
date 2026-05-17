@@ -158,8 +158,10 @@ impl Scheduler {
         let db = self.db.clone();
         let container_id = handle.id.clone();
 
+        let provider_id = resolved.provider_id.clone();
+        let model_id = resolved.model_id.clone();
         tokio::spawn(async move {
-            if let Err(e) = run_stage(adapter, engine, &job_id, &description, db.clone(), container_id.clone()).await {
+            if let Err(e) = run_stage(adapter, engine, &job_id, &description, db.clone(), container_id.clone(), &provider_id, &model_id).await {
                 error!("stage execution failed for job {}: {}", job_id, e);
                 let _ = db.fail_job(&job_id, &format!("stage failed: {}", e), "failed_retryable");
             }
@@ -191,6 +193,7 @@ impl Scheduler {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_stage(
     adapter: OpencodeAdapter,
     mut engine: workflow::Engine,
@@ -198,13 +201,15 @@ async fn run_stage(
     description: &str,
     db: Arc<Database>,
     container_id: String,
+    provider_id: &str,
+    model_id: &str,
 ) -> anyhow::Result<()> {
     let mut retries = 0u32;
     loop {
         let ready = adapter.create_session(
             &format!("trailhead-{}-probe", job_id),
-            "anthropic",
-            "claude-sonnet-4-20250514",
+            provider_id,
+            model_id,
             vec![],
         ).await.is_ok();
         if ready {
@@ -219,9 +224,6 @@ async fn run_stage(
 
     let _ = &container_id;
 
-    let stage = engine.current_stage_def()
-        .ok_or_else(|| anyhow::anyhow!("no current stage"))?;
-
     let project = resolver::ProjectVars {
         name: String::new(),
         repo: String::new(),
@@ -229,16 +231,9 @@ async fn run_stage(
     };
     let prompt = engine.resolve_stage_prompt(description, &project, &HashMap::new())?;
 
-    let model_provider = stage.model.as_deref()
-        .and_then(|m| m.split_once('/').map(|(p, _)| p))
-        .unwrap_or("anthropic");
-    let model_id = stage.model.as_deref()
-        .and_then(|m| m.split_once('/').map(|(_, id)| id))
-        .unwrap_or("claude-sonnet-4-20250514");
-
     let session_id = adapter.create_session(
         &format!("trailhead-{}-{}", job_id, engine.current_stage),
-        model_provider,
+        provider_id,
         model_id,
         vec![],
     ).await?;
