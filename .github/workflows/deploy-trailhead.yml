@@ -56,7 +56,7 @@ jobs:
           $SCP trailhead-service "deploy@${DEPLOY_HOST}:/tmp/trailhead-service-${VERSION}"
           $SSH "sudo mv /tmp/trailhead-service-${VERSION} /opt/codery/trailhead/bin/trailhead-service-${VERSION} && sudo chmod +x /opt/codery/trailhead/bin/trailhead-service-${VERSION} && sudo ln -sf /opt/codery/trailhead/bin/trailhead-service-${VERSION} /opt/codery/trailhead/bin/current"
 
-          $SSH "test -f /opt/codery/trailhead/trailhead.toml || printf 'model = \"anthropic/claude-sonnet-4-20250514\"\n\n[provider.anthropic]\napi = \"anthropic\"\nenv = [\"ANTHROPIC_API_KEY\"]\n' | sudo tee /opt/codery/trailhead/trailhead.toml"
+          $SSH "printf 'model = \"deepseek/deepseek-v4-flash\"\n\n[provider.deepseek]\napi = \"deepseek\"\nenv = [\"DEEPSEEK_API_KEY\"]\nbase_url = \"https://api.deepseek.com/v1\"\n' | sudo tee /opt/codery/trailhead/trailhead.toml"
 
           for f in crates/trailhead-service/skills/*.md; do
             $SCP "$f" "deploy@${DEPLOY_HOST}:/tmp/$(basename "$f")"
