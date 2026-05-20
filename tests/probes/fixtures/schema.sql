@@ -67,10 +67,24 @@ CREATE TABLE IF NOT EXISTS prompt_history (
 CREATE TABLE IF NOT EXISTS workflows (
     name            TEXT PRIMARY KEY,
     content         TEXT NOT NULL,
+    content_hash    TEXT,
     source          TEXT NOT NULL,
     project_id      TEXT REFERENCES projects(id),
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id              TEXT PRIMARY KEY,
+    job_id          TEXT NOT NULL REFERENCES jobs(id),
+    stage           TEXT NOT NULL,
+    response        TEXT NOT NULL,
+    session_path    TEXT NOT NULL,
+    git_sha         TEXT NOT NULL,
+    token_usage     TEXT,
+    files_changed   TEXT DEFAULT '[]',
+    commit_message  TEXT DEFAULT '',
+    created_at      TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
