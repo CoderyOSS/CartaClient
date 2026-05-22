@@ -77,6 +77,11 @@ impl TrailheadMcpServer {
 
 #[tool_router(server_handler)]
 impl TrailheadMcpServer {
+    #[tool(description = "Get the running Trailhead service version")]
+    pub async fn version(&self) -> String {
+        serde_json::json!({"version": env!("CARGO_PKG_VERSION")}).to_string()
+    }
+
     #[tool(description = "List all jobs")]
     pub async fn jobs_list(&self) -> String {
         match self.db.list_jobs() {
