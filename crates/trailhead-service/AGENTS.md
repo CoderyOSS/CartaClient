@@ -35,7 +35,7 @@ ssh gem@apps 'export PATH="$HOME/.cargo/bin:$PATH" && cd /home/gem/projects/Code
 - **Database**: SQLite via rusqlite in `src/db.rs`. Add new columns via `MIGRATIONS` array
 - **Workflow engine**: YAML-based state machines in `src/workflow/parser.rs`. Stages are `IndexMap<String, Stage>`
 - **Scheduler**: Event-driven via `tokio::sync::watch`. Drives job lifecycle in `src/scheduler.rs`
-- **Routes in web.rs**: API routes (`/api/v1/*`) + fallback serves embedded Flutter SPA at `ui/dist/`
+- **Routes in web.rs**: API routes (`/api/v1/*`) + fallback serves embedded Flutter SPA at `ui/static/`
 
 ## Frontend
 
@@ -44,8 +44,8 @@ Flutter frontend lives at `frontend/` (separate project, independent version). W
 ## Embed Pipeline
 
 1. `flutter build web --release` produces `frontend/build/web/`
-2. `build.rs` copies it to `crates/trailhead-service/ui/dist/`
-3. `rust_embed::Embed` includes `ui/dist/` in the binary
+2. `build.rs` copies it to `crates/trailhead-service/ui/static/`
+3. `rust_embed::Embed` includes `ui/static/` in the binary
 4. `web.rs` `serve_spa()` serves embedded assets via axum fallback handler
 
 See `frontend/AGENTS.md` for frontend-specific instructions.

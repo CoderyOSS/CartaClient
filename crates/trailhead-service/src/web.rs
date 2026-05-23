@@ -18,7 +18,7 @@ use std::sync::Arc;
 use crate::db::Database;
 
 #[derive(Embed)]
-#[folder = "ui/dist/"]
+#[folder = "ui/static/"]
 struct WebAssets;
 
 #[derive(Deserialize)]

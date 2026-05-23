@@ -2,10 +2,10 @@ use std::path::Path;
 
 fn main() {
     println!("cargo:rerun-if-changed=Cargo.toml");
-    println!("cargo:rerun-if-changed=ui/dist/");
+    println!("cargo:rerun-if-changed=ui/static/");
 
     let frontend_build = Path::new("../../frontend/build/web");
-    let embed_dir = Path::new("ui/dist");
+    let embed_dir = Path::new("ui/static");
 
     if frontend_build.is_dir() {
         let _ = std::fs::remove_dir_all(embed_dir);
@@ -16,7 +16,9 @@ fn main() {
             Err(e) => eprintln!("cargo:warning=frontend copy failed: {e}"),
         }
     } else {
-        eprintln!("cargo:warning=frontend build not found at {}, skip embedding", frontend_build.display());
+        eprintln!("cargo:warning=frontend build not found at {}, keeping placeholder", frontend_build.display());
+        // Keep the git-tracked placeholder so #[derive(Embed)] has a folder to read.
+        std::fs::create_dir_all(embed_dir).ok();
     }
 }
 

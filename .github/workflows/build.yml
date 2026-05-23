@@ -49,7 +49,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: frontend-web
-          path: crates/trailhead-service/ui/dist/
+          path: crates/trailhead-service/ui/static/
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
