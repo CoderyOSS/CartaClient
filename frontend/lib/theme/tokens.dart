@@ -26,6 +26,26 @@ class AppColors {
   static const Color warning = Color(0xFFe6b341);
   static const Color danger = Color(0xFFe26464);
   static const Color info = Color(0xFF6ea8d9);
+
+  static const Gradient hearthGradient = RadialGradient(
+    center: Alignment(0, -1.1),
+    radius: 1.1,
+    colors: [
+      Color(0xFF1d2027),
+      Color(0xFF14161b),
+      Color(0xFF0c0d10),
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+
+  static const Gradient loafGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF1a1d23),
+      Color(0xFF1f232a),
+    ],
+  );
 }
 
 class AppSpacing {

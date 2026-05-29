@@ -6,6 +6,7 @@ import 'widgets/mode_rail.dart';
 import 'widgets/top_bar.dart';
 import 'widgets/workflows_sidebar.dart';
 import 'widgets/jobs_sidebar.dart';
+import 'widgets/canvas/graph_canvas.dart';
 
 void main() {
   runApp(const TrailheadApp());
@@ -45,8 +46,8 @@ class TrailheadShell extends ConsumerWidget {
             child: Column(
               children: [
                 const TopBar(),
-                Expanded(
-                  child: Container(color: AppColors.bg0),
+                const Expanded(
+                  child: GraphCanvas(),
                 ),
               ],
             ),
