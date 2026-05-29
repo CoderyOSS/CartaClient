@@ -7,3 +7,13 @@ final modeProvider = StateProvider<AppMode>((ref) => AppMode.active);
 final selectedJobProvider = StateProvider<JobSummary?>((ref) => null);
 
 final workflowProvider = StateProvider<WorkflowSummary>((ref) => mockWorkflow);
+
+final workflowsProvider = StateProvider<List<WorkflowSummary>>(
+  (ref) => mockWorkflows,
+);
+
+final jobsProvider = StateProvider<List<JobSummary>>(
+  (ref) => mockJobs,
+);
+
+final sidebarViewModeProvider = StateProvider<String>((ref) => 'grouped');

@@ -23,6 +23,8 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 | Top bar | `lib/widgets/top_bar.dart` | ConsumerWidget — BuildBar, JobBar, HistoryListBar per mode |
 | App button | `lib/widgets/app_button.dart` | ghost/secondary/trail/primary/danger variants |
 | Status tag | `lib/widgets/status_tag.dart` | StatusDot (with pulse) + StatusTag (colored pill) |
+| Workflows sidebar | `lib/widgets/workflows_sidebar.dart` | 240px, Build mode, workflow list with active rail |
+| Jobs sidebar | `lib/widgets/jobs_sidebar.dart` | 260px, Active + History modes, grouped/flat toggle |
 | State providers | `lib/providers/mode_provider.dart` | `modeProvider`, `selectedJobProvider`, `workflowProvider` |
 | Mock data | `lib/providers/mock_data.dart` | `JobSummary`, `WorkflowSummary`, `JobState` + mock instances |
 | App shell | `lib/main.dart` | ProviderScope + ConsumerWidget shell: rail + top bar + content |
@@ -30,7 +32,7 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 
 ### Not Yet Implemented
 
-- Sidebars (Workflows sidebar, Jobs sidebar)
+- ~~Sidebars (Workflows sidebar, Jobs sidebar)~~
 - Canvas (workflow graph visualization)
 - Stage drawer (right slide-over)
 - Snapshot filmstrip (bottom strip)
@@ -88,7 +90,9 @@ frontend/
 │       ├── icons.dart         # TrailheadIcon (12 Lucide SVG stroke icons)
 │       ├── mode_rail.dart     # ModeRail (ConsumerWidget) + AppMode enum
 │       ├── status_tag.dart    # StatusDot + StatusTag
-│       └── top_bar.dart       # TopBar (ConsumerWidget) + BuildBar/JobBar/HistoryListBar
+│       ├── top_bar.dart       # TopBar (ConsumerWidget) + BuildBar/JobBar/HistoryListBar
+│       ├── workflows_sidebar.dart # WorkflowsSidebar (Build mode, 240px)
+│       └── jobs_sidebar.dart  # JobsSidebar (Active + History, 260px)
 ├── serve.js                   # Bun static server for dev preview
 ├── assets/
 │   └── images/

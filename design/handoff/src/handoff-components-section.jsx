@@ -1,6 +1,7 @@
 /* global React, Card, Stage, StatesGrid, TokensList, StageSplit, SubBlock, H3, AnatomyLegend,
    Button, IconButton, Icon, StatusDot, StatusTag, Tag, Eyebrow,
    ModeRail, WorkflowsSidebar, JobsSidebar, TopBar, StageDrawer, Filmstrip, RunsView,
+   Canvas, WorkerNode, RoutingNode, BuilderTips, OperatorPicker,
    WORKFLOW, JOB, JOBS_LOG, SNAPSHOTS, STAGE_EXECUTIONS */
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -383,7 +384,7 @@ function ModeRailCard() {
       <StageSplit
         leftFlex={1.1}
         left={(
-          <div style={{ position: "relative" }}>
+          <div style={{ position: "relative", display: "inline-block" }}>
             <Constrained width={52} height={520}>
               <ModeRail mode="active" onMode={() => {}} activeCount={3} />
             </Constrained>
@@ -455,7 +456,7 @@ function SidebarsCard() {
   return (
     <Card
       title="Sidebars"
-      description="Two sidebar variants — Workflows (Build mode) and Jobs (Active + History modes). Jobs sidebar has a grouped/flat toggle. Both share the same header structure: title, subtitle, optional secondary controls."
+      description="Two sidebar variants — Workflows (Build mode) and Jobs (Active + History modes). The Jobs sidebar is shared across both modes: Active shows live jobs (running/paused/queued/retrying) with a live badge in the footer; History shows completed jobs (passed/failed/cancelled) with a filter button and 'no search yet' footer. Both support grouped/flat view toggle."
       dartImport="lib/widgets/sidebars/{workflows,jobs}_sidebar.dart"
     >
       <SubBlock label="workflows sidebar · Build mode · 240px">
@@ -491,26 +492,64 @@ function SidebarsCard() {
           )}
           right={(
             <AnatomyLegend items={[
-              { label: "title block", desc: "Active jobs · subtitle counts" },
+              { label: "title block", desc: "Active jobs · subtitle 'N running · paused · queued'" },
               { label: "view toggle", desc: "grouped (workflow → jobs) ↔ flat (jobs + workflow tag)" },
-              { label: "group header", desc: "workflow name · chevron · count" },
-              { label: "job row · grouped", desc: "status dot · input string · timestamp" },
-              { label: "footer", desc: "showing N · live badge on Active · 'no search yet' on History" },
+              { label: "group header", desc: "workflow name · chevron · count · collapses on click" },
+              { label: "job row · grouped", desc: "status dot · input string · run id suffix · timestamp · accent left rail when selected" },
+              { label: "footer · Active", desc: "'showing N' on left · pulsing live badge on right" },
             ]} />
           )}
         />
       </SubBlock>
 
-      <SubBlock label="jobs sidebar · flat view (workflow appears as a tag chip on each row)" last>
+      <SubBlock label="jobs sidebar · History mode · 260px · grouped view">
+        <StageSplit
+          leftFlex={1.2}
+          left={(
+            <Constrained width={260} height={460}>
+              <JobsSidebar
+                kind="history" jobs={JOBS_LOG}
+                viewMode="grouped" onViewMode={() => {}}
+                activeId="r_8f29442" onPick={() => {}}
+              />
+            </Constrained>
+          )}
+          right={(
+            <AnatomyLegend items={[
+              { label: "title block", desc: "History · subtitle 'N completed · last 24h'" },
+              { label: "filter button", desc: "gear icon + 'filter' label · 1px border-1 · sits beside the view toggle · no search implemented yet" },
+              { label: "group header", desc: "workflow name · count · same structure as Active" },
+              { label: "job row", desc: "passed/failed/cancelled status dot · input string · run id suffix · timestamp" },
+              { label: "footer · History", desc: "'showing N' on left · 'no search yet' on right (no live badge)" },
+            ]} />
+          )}
+        />
+      </SubBlock>
+
+      <SubBlock label="jobs sidebar · History mode · flat view · workflow shown as tag chip per row">
         <Stage padding={18} height={300}>
           <Constrained width={260} height={260}>
             <JobsSidebar
-              kind="active" jobs={JOBS_LOG}
+              kind="history" jobs={JOBS_LOG}
               viewMode="flat" onViewMode={() => {}}
-              activeId="r_8f2a91c" onPick={() => {}}
+              activeId="r_8f29442" onPick={() => {}}
             />
           </Constrained>
         </Stage>
+      </SubBlock>
+
+      <SubBlock label="tokens" last>
+        <TokensList tokens={[
+          { name: "width",          value: "CompSidebar.workflowWidth · 240 · jobsWidth · 260" },
+          { name: "header.font",    value: "AppType.display · 15px · weight 600 for title" },
+          { name: "subtitle.font",  value: "AppType.mono · 10.5px · palette.textSubtle" },
+          { name: "viewToggle.bg",  value: "palette.bg3 + 1px border1 · active item: palette.bg4" },
+          { name: "filterBtn.bg",   value: "transparent · 1px palette.border1 · radius 5 · History only" },
+          { name: "groupHeader",    value: "AppType.mono · 11px · weight 600 · chevron 9px" },
+          { name: "row.active.bg",  value: "palette.bg3 · 2px accent left rail at absolute left" },
+          { name: "footer.font",    value: "AppType.mono · 10px · palette.textSubtle" },
+          { name: "footer.live",    value: "StatusDot running + pulse · Active mode only" },
+        ]} />
       </SubBlock>
     </Card>
   );
@@ -732,6 +771,459 @@ function RunsTableCard() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Graph nodes
+// ════════════════════════════════════════════════════════════════════════
+
+const DEMO_WORKER = {
+  id: "demo_w", kind: "worker",
+  label: "full_review",
+  sub: "code quality · security",
+  model: "sonnet",
+  skills: ["git.diff", "code.review.semantic", "sec.semgrep"],
+};
+
+function WNodeWrap({ stage, status, selected, density }) {
+  const compact = density === "compact";
+  const w = compact ? 168 : 192;
+  const h = compact ? 60  : 80;
+  return (
+    <div style={{ position: "relative", width: w, height: h, flexShrink: 0 }}>
+      <WorkerNode stage={stage} status={status || null} info={{ x: 0, y: 0 }}
+        selected={!!selected} density={density || "default"} onClick={() => {}} />
+    </div>
+  );
+}
+
+function RNodeWrap({ stage, selected }) {
+  return (
+    <div style={{ position: "relative", width: 192, height: 80, flexShrink: 0 }}>
+      <RoutingNode stage={stage} status={null} info={{ x: 0, y: 0 }}
+        selected={!!selected} density="default" onClick={() => {}} />
+    </div>
+  );
+}
+
+function GraphNodesCard() {
+  return (
+    <Card
+      title="Graph nodes"
+      description="Two node shapes live on the canvas. Worker nodes are rounded rectangles — the primary stage type holding a prompt, skills, and config. Routing nodes are pill-shaped capsules for control-flow operators."
+      dartImport="lib/widgets/canvas/worker_node.dart · routing_node.dart"
+    >
+      <SubBlock label="worker node · all states · 192×80px default">
+        <StatesGrid columns={4} items={[
+          { label: "default",                 children: <WNodeWrap stage={DEMO_WORKER} /> },
+          { label: "selected",                children: <WNodeWrap stage={DEMO_WORKER} selected /> },
+          { label: "running · glow",          children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "running", progress: 0.55 }} /> },
+          { label: "compact · 168×60",        children: <WNodeWrap stage={DEMO_WORKER} density="compact" /> },
+          { label: "passed",                  children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "passed" }} /> },
+          { label: "failed",                  children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "failed" }} /> },
+          { label: "selected · passed",       children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "passed" }} selected /> },
+          { label: "selected · failed",       children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "failed" }} selected /> },
+        ]} />
+      </SubBlock>
+
+      <SubBlock label="routing operators · pill-shaped · 124×50px in a 192×80 footprint">
+        <Stage padding={20}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+            {[
+              { kind: "switch", sub: "model.tier",  label: "switch" },
+              { kind: "branch", sub: "score ≥ 0.8", label: "branch" },
+              { kind: "map",    sub: "file list",   label: "map" },
+              { kind: "loop",   sub: "max 5 iters", label: "loop" },
+              { kind: "join",   sub: "wait all",    label: "join" },
+            ].map(s => <RNodeWrap key={s.kind} stage={{ id: s.kind, ...s }} />)}
+          </div>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="anatomy · worker node">
+        <StageSplit
+          left={<WNodeWrap stage={DEMO_WORKER} status={{ status: "running", progress: 0.62 }} />}
+          right={(
+            <AnatomyLegend items={[
+              { label: "status rail",   desc: "3px left edge · colored by run status · full height" },
+              { label: "label",         desc: "mono 13px (compact 12px) · weight 600 · truncated" },
+              { label: "model badge",   desc: "mono 9px · bg4 · hidden in compact density" },
+              { label: "sub",           desc: "11.5px (compact 10.5px) · textSubtle · single line" },
+              { label: "skills row",    desc: "mono 9px chips · first 3 shown + overflow count · hidden compact" },
+              { label: "progress bar",  desc: "2px bottom strip · accent gradient · running only" },
+              { label: "status badge",  desc: "9px pill top-right · passed / failed / skipped only" },
+            ]} />
+          )}
+        />
+      </SubBlock>
+
+      <SubBlock label="tokens" last>
+        <TokensList tokens={[
+          { name: "worker.size",       value: "192 × 80px · compact: 168 × 60px" },
+          { name: "routing.size",      value: "124 × 50px · footprint 192 × 80 (centered)" },
+          { name: "routing.shape",     value: "borderRadius: 999 (pill · capsule)" },
+          { name: "bg.default",        value: "palette.loafGradient" },
+          { name: "bg.running",        value: "accent 12% mix into bg2 → bg2 at 70%" },
+          { name: "border.default",    value: "1px palette.border2" },
+          { name: "border.selected",   value: "1px accent · outer: 1px accent + 4px accent 22% + shadow-1" },
+          { name: "statusRail.width",  value: "3px · colorKeyed to run status" },
+          { name: "label.font",        value: "AppType.mono · 13px · weight 600" },
+          { name: "badge.font",        value: "AppType.mono · 9px · radius 999 · colorKeyed" },
+          { name: "progressBar",       value: "h 2px · bottom 3px · l/r 6px · palette.crustGradient" },
+        ]} />
+      </SubBlock>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Graph edges
+// ════════════════════════════════════════════════════════════════════════
+
+function EdgeSvg({ id, d, stroke, strokeWidth, strokeDasharray, opacity, label }) {
+  const markerId = `ea-${id}`;
+  const mx = 190, my = 50;
+  return (
+    <svg width={380} height={100} style={{ overflow: "visible", display: "block" }}>
+      <defs>
+        <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill={stroke || "var(--co-fg-3)"} />
+        </marker>
+      </defs>
+      <path d={d} fill="none" stroke={stroke || "var(--co-fg-3)"}
+        strokeWidth={strokeWidth || 1.5} strokeDasharray={strokeDasharray || "0"}
+        markerEnd={`url(#${markerId})`} opacity={opacity || 1} />
+      {label && (
+        <g transform={`translate(${mx} ${my})`}>
+          <rect x={-label.length * 3.6 - 6} y={-9} width={label.length * 7.2 + 12} height={18} rx={9}
+            fill="var(--co-bg-3)" stroke="var(--co-border-2)" strokeWidth={1} />
+          <text x={0} y={4} textAnchor="middle"
+            style={{ fontFamily: "var(--co-font-mono)", fontSize: 10, fill: "var(--co-fg-2)", fontWeight: 500 }}>
+            {label}
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function GraphEdgesCard() {
+  const a = { x: 20, y: 30 }, b = { x: 360, y: 70 };
+  const curvedD   = `M ${a.x} ${a.y} C ${a.x+120} ${a.y}, ${b.x-120} ${b.y}, ${b.x} ${b.y}`;
+  const orthoD    = `M ${a.x} ${a.y} L ${a.x} 50 L ${b.x} 50 L ${b.x} ${b.y}`;
+  const straightD = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+
+  return (
+    <Card
+      title="Graph edges"
+      description="SVG cubic beziers connect nodes. Three curve styles, four run-state appearances, optional case labels on routing branches, and animated flow tokens on active edges."
+      dartImport="lib/widgets/canvas/edge_painter.dart"
+    >
+      <SubBlock label="edge styles">
+        <StatesGrid columns={1} items={[
+          { label: "curved (default) · c = max(40, |dx| × 0.5)", children: <EdgeSvg id="c0" d={curvedD} /> },
+          { label: "orthogonal · 3-segment L-routed",             children: <EdgeSvg id="c1" d={orthoD} /> },
+          { label: "straight · direct line",                       children: <EdgeSvg id="c2" d={straightD} /> },
+        ]} />
+      </SubBlock>
+
+      <SubBlock label="edge states (curved style)">
+        <StatesGrid columns={2} items={[
+          { label: "design / done · solid fg3 · 1.5px",          children: <EdgeSvg id="s0" d={curvedD} /> },
+          { label: "active · accent · 2px",                       children: <EdgeSvg id="s1" d={curvedD} stroke="var(--co-accent)" strokeWidth={2} /> },
+          { label: "pending · dashed 4 4 · fg4 · opacity 0.6",    children: <EdgeSvg id="s2" d={curvedD} strokeDasharray="4 4" stroke="var(--co-fg-4)" opacity={0.6} /> },
+          { label: "skipped · dashed 2 5 · fg4 · opacity 0.35",   children: <EdgeSvg id="s3" d={curvedD} strokeDasharray="2 5" stroke="var(--co-fg-4)" opacity={0.35} /> },
+        ]} />
+      </SubBlock>
+
+      <SubBlock label="case label · routing branch identifier · midpoint pill">
+        <Stage padding={20} height={120}>
+          <EdgeSvg id="lbl" d={curvedD} label="passed" />
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="flow tokens · 3 accent dots animated along active edge">
+        <Stage padding={20} height={120}>
+          <svg width={380} height={100} style={{ overflow: "visible", display: "block" }}>
+            <defs>
+              <marker id="ea-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--co-accent)" />
+              </marker>
+            </defs>
+            <path d={curvedD} fill="none" stroke="var(--co-accent)" strokeWidth={2} markerEnd="url(#ea-flow)" />
+            {[0, 0.33, 0.66].map((o, i) => (
+              <circle key={i} r={3.2} fill="var(--co-accent)">
+                <animateMotion dur="2s" repeatCount="indefinite" begin={`${-o * 2}s`} path={curvedD} />
+              </circle>
+            ))}
+          </svg>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="tokens" last>
+        <TokensList tokens={[
+          { name: "strokeWidth.default",  value: "1.5px" },
+          { name: "strokeWidth.active",   value: "2px" },
+          { name: "color.design/done",    value: "palette.fg3" },
+          { name: "color.active",         value: "accent.accent" },
+          { name: "color.pending",        value: "palette.fg4 · opacity 0.6 · dash 4 4" },
+          { name: "color.skipped",        value: "palette.fg4 · opacity 0.35 · dash 2 5" },
+          { name: "arrow",                value: "SVG marker · viewBox 10×10 · 6×6 rendered" },
+          { name: "caseLabel.bg",         value: "palette.bg3 + 1px border2 · radius 9" },
+          { name: "caseLabel.font",       value: "AppType.mono · 10px · weight 500" },
+          { name: "flowToken.r",          value: "3.2px · accent fill · 3 dots · staggered 0.33s apart" },
+          { name: "controlPoint",         value: "c = max(40, |dx| × 0.5) horizontal · |dy| × 0.5 vertical" },
+        ]} />
+      </SubBlock>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Graph canvas viewport
+// ════════════════════════════════════════════════════════════════════════
+
+function GraphCanvasCard() {
+  return (
+    <Card
+      title="Graph canvas"
+      description="Infinite pan + pinch-zoom viewport. Holds nodes, SVG edges, and builder overlays. Three layout algorithms: graph (authored positions), swimlane (column/lane grid), tree (depth/breadth grid). Zoom range 0.35×–2.0× with fit-to-nodes."
+      dartImport="lib/widgets/canvas/graph_canvas.dart"
+    >
+      <SubBlock label="canvas · builder mode · graph layout · dot grid · zoom controls">
+        <Stage padding={0} height={440}>
+          <Constrained width="100%" height={440}>
+            <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+              <Canvas workflow={WORKFLOW} job={null} view="builder"
+                selectedId={null} onSelect={() => {}}
+                canvasStyle="graph" edgeStyle="curved" density="default"
+                inflightAnim="tokens" drawerOpen={false} />
+            </div>
+          </Constrained>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="layout modes">
+        <StatesGrid columns={2} items={[
+          { label: "swimlane · left→right columns + lanes", children: (
+            <Constrained width={320} height={260}>
+              <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+                <Canvas workflow={WORKFLOW} job={null} view="builder"
+                  selectedId={null} onSelect={() => {}}
+                  canvasStyle="swimlane" edgeStyle="curved" density="compact"
+                  inflightAnim="off" drawerOpen={false} />
+              </div>
+            </Constrained>
+          )},
+          { label: "tree · top→down depth rows", children: (
+            <Constrained width={320} height={260}>
+              <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%" }}>
+                <Canvas workflow={WORKFLOW} job={null} view="builder"
+                  selectedId={null} onSelect={() => {}}
+                  canvasStyle="tree" edgeStyle="curved" density="compact"
+                  inflightAnim="off" drawerOpen={false} />
+              </div>
+            </Constrained>
+          )},
+        ]} />
+      </SubBlock>
+
+      <SubBlock label="tokens" last>
+        <TokensList tokens={[
+          { name: "bg",                value: "palette.hearthGradient (canvas fill)" },
+          { name: "dotGrid.size",      value: "24 × zoom px · radial gradient dots · border2 · opacity 0.35" },
+          { name: "zoom.range",        value: "0.35× – 2.0× · default: auto-fit to node bounding box" },
+          { name: "zoomControl.bg",    value: "palette.bg2 · 1px border1 · radius 8 · shadow-2 · bottom-left" },
+          { name: "zoomControl.btn",   value: "22×22px · mono 13px · transparent bg · hover bg3" },
+          { name: "layoutBadge",       value: "mono 10px · palette.textSubtle · bottom-right · radius 8" },
+          { name: "pan",               value: "drag on canvas background · mousedown away from nodes" },
+          { name: "zoom.gesture",      value: "ctrl/cmd+wheel → scale · plain wheel → pan x/y" },
+          { name: "refit",             value: "bbox of all node positions · padding 40px · max zoom 0.9" },
+        ]} />
+      </SubBlock>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Builder affordances
+// ════════════════════════════════════════════════════════════════════════
+
+const PICKER_TYPES = [
+  { kind: "worker", label: "worker",   icon: "zap",       desc: "skills · prompt · result" },
+  { kind: "switch", label: "switch",   icon: "gitBranch", desc: "n-way enum routing" },
+  { kind: "branch", label: "branch",   icon: "gitBranch", desc: "if / else" },
+  { kind: "map",    label: "for-each", icon: "refresh",   desc: "iterate a list, fan-out" },
+  { kind: "loop",   label: "loop",     icon: "refresh",   desc: "re-enter while condition" },
+  { kind: "join",   label: "join",     icon: "workflow",  desc: "wait for N upstreams" },
+];
+
+function OperatorPickerMock() {
+  const [hovered, setHovered] = React.useState(null);
+  return (
+    <div style={{
+      width: 240,
+      background: "var(--co-bg-2)",
+      border: "1px solid var(--co-border-2)",
+      borderRadius: 8,
+      boxShadow: "var(--co-shadow-3)",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "8px 10px 6px",
+        borderBottom: "1px solid var(--co-border-1)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <span style={{
+          fontFamily: "var(--co-font-mono)", fontSize: 10,
+          letterSpacing: "0.08em", textTransform: "uppercase",
+          color: "var(--co-text-subtle)", fontWeight: 500,
+        }}>add next stage</span>
+        <Icon name="x" size={10} color="var(--co-text-subtle)" />
+      </div>
+      <div style={{ padding: 4 }}>
+        {PICKER_TYPES.map(t => (
+          <div key={t.kind}
+            onMouseEnter={() => setHovered(t.kind)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              display: "grid", gridTemplateColumns: "22px 1fr",
+              alignItems: "center", gap: 8,
+              padding: "6px 8px", borderRadius: 5, cursor: "pointer",
+              background: hovered === t.kind ? "var(--co-bg-3)" : "transparent",
+            }}>
+            <span style={{
+              width: 22, height: 22, borderRadius: 5,
+              background: t.kind === "worker" ? "color-mix(in oklab, var(--co-accent) 14%, var(--co-bg-3))" : "var(--co-bg-3)",
+              border: "1px solid var(--co-border-2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: t.kind === "worker" ? "var(--co-accent)" : "var(--co-fg-2)",
+            }}>
+              <Icon name={t.icon} size={11} color="currentColor" />
+            </span>
+            <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+              <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 11.5, color: "var(--co-text-strong)", fontWeight: 500 }}>{t.label}</span>
+              <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10, color: "var(--co-text-subtle)" }}>{t.desc}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BuilderAffordancesCard() {
+  return (
+    <Card
+      title="Builder affordances"
+      description="Zoom-invariant overlays that only appear in build mode. Output handles on nodes for connecting, insert/delete pins on edges, a floating node toolbar on selection, and the operator picker popover."
+      dartImport="lib/widgets/canvas/builder_overlay.dart · operator_picker.dart"
+    >
+      <SubBlock label="output handle · appears on hover/select · drag dot to connect · + to add downstream">
+        <Stage padding={28} height={100}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 12, height: 12, borderRadius: 999,
+              background: "var(--co-accent)",
+              border: "2px solid var(--co-bg-1)",
+              boxShadow: "0 0 0 1px var(--co-accent), 0 0 8px color-mix(in oklab, var(--co-accent) 50%, transparent)",
+              flexShrink: 0,
+            }} />
+            <button type="button" style={{
+              width: 22, height: 22, padding: 0, borderRadius: 999,
+              background: "var(--co-bg-2)", border: "1px dashed var(--co-accent)",
+              color: "var(--co-accent)", display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 600, cursor: "pointer",
+            }}>+</button>
+            <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10.5, color: "var(--co-text-subtle)" }}>
+              counter-scaled · constant pixel size at any zoom
+            </span>
+          </div>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="edge affordance · midpoint · + insert operator · × delete edge">
+        <Stage padding={28} height={100}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button type="button" style={{
+              width: 24, height: 24, padding: 0, borderRadius: 999,
+              background: "var(--co-accent)", border: "2px solid var(--co-bg-1)",
+              boxShadow: "0 0 0 1px var(--co-accent), 0 2px 8px rgba(0,0,0,0.4)",
+              color: "var(--co-accent-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}>+</button>
+            <button type="button" style={{
+              width: 20, height: 20, padding: 0, borderRadius: 999,
+              background: "var(--co-bg-1)", border: "1px solid var(--co-danger)",
+              color: "var(--co-danger)",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}><Icon name="x" size={10} color="currentColor" /></button>
+            <span style={{ marginLeft: 6, fontFamily: "var(--co-font-mono)", fontSize: 10.5, color: "var(--co-text-subtle)" }}>
+              24px accent insert · 20px danger delete
+            </span>
+          </div>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="node toolbar · floating above selected node · duplicate + delete">
+        <Stage padding={28} height={100}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
+            background: "var(--co-bg-1)", border: "1px solid var(--co-border-2)",
+            borderRadius: 6, boxShadow: "var(--co-shadow-2)",
+          }}>
+            {[
+              { icon: "copy", label: "duplicate", danger: false },
+              null,
+              { icon: "x",    label: "delete",    danger: true },
+            ].map((item, i) => item === null
+              ? <span key={i} style={{ width: 1, height: 16, background: "var(--co-border-1)" }} />
+              : (
+                <button key={i} type="button" style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "3px 7px", background: "transparent", border: "none", borderRadius: 4,
+                  color: item.danger ? "var(--co-danger)" : "var(--co-text)",
+                  cursor: "pointer", fontFamily: "var(--co-font-sans)", fontSize: 11,
+                }}>
+                  <Icon name={item.icon} size={11} color="currentColor" />
+                  {item.label}
+                </button>
+              )
+            )}
+          </div>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="operator picker · screen-space popover · shown on + click">
+        <Stage padding={20} height={330}>
+          <OperatorPickerMock />
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="builder tips · dismissible help panel · top-left of canvas">
+        <Stage padding={16} height={190}>
+          <div style={{ position: "relative", height: 158 }}>
+            <BuilderTips />
+          </div>
+        </Stage>
+      </SubBlock>
+
+      <SubBlock label="tokens" last>
+        <TokensList tokens={[
+          { name: "outputHandle.dot",    value: "12px · accent fill · 2px bg1 border · accent glow ring" },
+          { name: "outputHandle.addBtn", value: "22px · bg2 · 1px dashed accent · mono 14px" },
+          { name: "edgeInsert.btn",      value: "24px · accent fill · 2px bg1 ring · accent-ink color" },
+          { name: "edgeDelete.btn",      value: "20px · bg1 · 1px danger border" },
+          { name: "nodeToolbar.bg",      value: "palette.bg1 · border2 · radius 6 · shadow-2" },
+          { name: "nodeToolbar.font",    value: "AppType.sans · 11px · danger color on delete" },
+          { name: "picker.width",        value: "240px · bg2 · border2 · radius 8 · shadow-3" },
+          { name: "picker.row",          value: "22px icon square · mono 11.5px label + 10px desc subtitle" },
+          { name: "scaleInvariance",     value: "all overlays: transform scale(1/zoom) so px size stays constant" },
+        ]} />
+      </SubBlock>
+    </Card>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Layout helpers
 // ════════════════════════════════════════════════════════════════════════
 
@@ -755,6 +1247,10 @@ function ComponentsSection() {
       <StageDrawerCard />
       <FilmstripCard />
       <RunsTableCard />
+      <GraphNodesCard />
+      <GraphEdgesCard />
+      <GraphCanvasCard />
+      <BuilderAffordancesCard />
     </>
   );
 }

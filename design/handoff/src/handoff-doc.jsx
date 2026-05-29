@@ -47,7 +47,7 @@ function HandoffDoc() {
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img src="assets/trailhead-logo.png" alt="" width="32" height="32" />
+            <img src="assets/trailhead-logo.svg" alt="" width="32" height="32" />
             <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
               <span style={{
                 fontFamily: "var(--co-font-display)", fontSize: 16, fontWeight: 700,

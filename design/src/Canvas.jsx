@@ -18,6 +18,13 @@ function NodeShell({ status, selected, glow, density, children, onClick, style }
   const statusColor = status && status !== "queued" && status !== "skipped"
     ? `var(--co-${status === "passed" ? "success" : status === "failed" ? "danger" : status === "running" ? "accent" : status === "retrying" ? "warning" : "info"})`
     : "var(--co-border-2)";
+  const railShadow = (status === "queued" || status === "skipped")
+    ? `inset 3px 0 0 color-mix(in oklab, ${statusColor} 40%, transparent)`
+    : `inset 3px 0 0 ${statusColor}`;
+  const outlineShadow = selected
+    ? "0 0 0 1px var(--co-accent), 0 0 0 4px color-mix(in oklab, var(--co-accent) 22%, transparent), 0 6px 16px rgba(0,0,0,0.4)"
+    : status === "running" ? `0 0 18px color-mix(in oklab, var(--co-accent) 30%, transparent), 0 4px 12px rgba(0,0,0,0.4)`
+    : "var(--co-shadow-1)";
   return (
     <div
       onClick={onClick}
@@ -28,10 +35,7 @@ function NodeShell({ status, selected, glow, density, children, onClick, style }
           : "var(--co-grad-loaf)",
         border: `1px solid ${selected ? "var(--co-accent)" : status === "running" ? statusColor : "var(--co-border-2)"}`,
         borderRadius: 10,
-        boxShadow: selected
-          ? "0 0 0 1px var(--co-accent), 0 0 0 4px color-mix(in oklab, var(--co-accent) 22%, transparent), 0 6px 16px rgba(0,0,0,0.4)"
-          : status === "running" ? `0 0 18px color-mix(in oklab, var(--co-accent) 30%, transparent), 0 4px 12px rgba(0,0,0,0.4)`
-          : "var(--co-shadow-1)",
+        boxShadow: `${railShadow}, ${outlineShadow}`,
         cursor: "pointer",
         userSelect: "none",
         transition: "border-color 140ms, box-shadow 200ms, transform 100ms",
@@ -39,13 +43,6 @@ function NodeShell({ status, selected, glow, density, children, onClick, style }
       }}
       onMouseDown={e => e.stopPropagation()}
     >
-      {/* status rail */}
-      <div style={{
-        position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
-        background: statusColor,
-        borderRadius: "10px 0 0 10px",
-        opacity: status === "queued" || status === "skipped" ? 0.4 : 1,
-      }} />
       {children}
     </div>
   );
@@ -97,7 +94,7 @@ function WorkerNode({ stage, status, info, selected, density, onClick }) {
           {stage.sub}
         </div>
         {!compact && (
-          <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+          <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 5, flexWrap: "nowrap", overflow: "hidden" }}>
             {(stage.skills || []).slice(0, 3).map(sk => (
               <span key={sk} style={{
                 fontFamily: "var(--co-font-mono)", fontSize: 9,
@@ -175,7 +172,7 @@ function RoutingNode({ stage, status, info, selected, density, onClick }) {
         position: "absolute", inset: 0,
         background: running ? `linear-gradient(180deg, color-mix(in oklab, var(--co-accent) 14%, var(--co-bg-3)) 0%, var(--co-bg-3) 100%)` : "var(--co-bg-3)",
         border: `1px solid ${selected ? "var(--co-accent)" : running ? "var(--co-accent)" : "var(--co-border-3)"}`,
-        clipPath: `polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%)`,
+        borderRadius: 999,
         boxShadow: selected ? `0 0 0 3px color-mix(in oklab, var(--co-accent) 22%, transparent), 0 4px 10px rgba(0,0,0,0.4)`
                   : running ? `0 0 14px color-mix(in oklab, var(--co-accent) 30%, transparent)` : "var(--co-shadow-1)",
         transition: "border-color 140ms, box-shadow 200ms",
