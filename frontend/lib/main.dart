@@ -41,22 +41,29 @@ class TrailheadShell extends ConsumerWidget {
     final showSidebar = mode != AppMode.history || job != null;
 
     return Scaffold(
-      body: Row(
+      body: Column(
         children: [
-          const ModeRail(activeCount: 3),
-          if (showSidebar) _buildSidebar(mode, ref),
           Expanded(
-            child: Column(
+            child: Row(
               children: [
-                const TopBar(),
+                const ModeRail(activeCount: 3),
+                if (showSidebar) _buildSidebar(mode, ref),
                 Expanded(
-                  child: mode == AppMode.history && job == null
-                      ? const RunsTable()
-                      : const GraphCanvas(),
+                  child: Column(
+                    children: [
+                      const TopBar(),
+                      Expanded(
+                        child: mode == AppMode.history && job == null
+                            ? const RunsTable()
+                            : const GraphCanvas(),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
+          Container(height: 1, color: AppColors.border1),
         ],
       ),
     );
