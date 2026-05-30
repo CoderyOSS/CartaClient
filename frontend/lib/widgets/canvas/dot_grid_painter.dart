@@ -16,7 +16,7 @@ class DotGridPainter extends CustomPainter {
     if (spacing < 2) return;
 
     final paint = Paint()
-      ..color = AppColors.border2.withAlpha(89)
+      ..color = AppColors.fg4.withAlpha(77)
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 
