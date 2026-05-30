@@ -1,4 +1,4 @@
-import 'models/workflow_node.dart';
+import '../models/workflow_node.dart';
 
 enum JobState { running, paused, passed, failed, cancelled, queued, retrying }
 
