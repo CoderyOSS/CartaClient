@@ -106,11 +106,11 @@ class OperatorPicker extends StatelessWidget {
 
 enum OperatorType {
   worker(label: 'worker', desc: 'skills · prompt · result', icon: TrailheadIconData.play),
-  switch_(label: 'switch', desc: 'n-way enum routing', icon: TrailheadIconData.settings),
-  branch(label: 'branch', desc: 'if / else', icon: TrailheadIconData.settings),
-  map(label: 'for-each', desc: 'iterate a list, fan-out', icon: TrailheadIconData.refresh),
+  switch_(label: 'switch', desc: 'n-way enum routing', icon: TrailheadIconData.gitBranch),
+  branch(label: 'branch', desc: 'if / else', icon: TrailheadIconData.gitBranch),
+  map(label: 'for-each', desc: 'iterate a list, fan-out', icon: TrailheadIconData.forEach),
   loop(label: 'loop', desc: 're-enter while condition', icon: TrailheadIconData.refresh),
-  join(label: 'join', desc: 'wait for N upstreams', icon: TrailheadIconData.workflow);
+  join(label: 'join', desc: 'wait for N upstreams', icon: TrailheadIconData.merge);
 
   const OperatorType({
     required this.label,

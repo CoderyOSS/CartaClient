@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/tokens.dart';
+import '../models/workflow_document.dart';
+import '../providers/canvas_controller.dart';
 import '../providers/mode_provider.dart';
 import '../providers/mock_data.dart';
 import '../models/workflow_node.dart';
@@ -53,7 +55,13 @@ class WorkflowsSidebar extends ConsumerWidget {
                 ],
               );
               ref.read(workflowsProvider.notifier).update((list) => [...list, newWf]);
+              ref.read(documentsProvider.notifier).update((docs) {
+                final m = Map<String, WorkflowDocument>.from(docs);
+                m[id] = WorkflowDocument(workflow: newWf, viewport: const CanvasViewport());
+                return m;
+              });
               ref.read(workflowProvider.notifier).state = newWf;
+              ref.read(canvasControllerProvider.notifier).reset();
               ref.read(modeProvider.notifier).state = AppMode.build;
             },
           ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'theme/tokens.dart';
+import 'models/workflow_document.dart';
+import 'providers/canvas_controller.dart';
 import 'providers/mode_provider.dart';
 import 'widgets/mode_rail.dart';
 import 'widgets/top_bar.dart';
@@ -75,11 +77,20 @@ class TrailheadShell extends ConsumerWidget {
         return WorkflowsSidebar(
           activeId: ref.watch(workflowProvider).id,
           onPick: (id) {
-            final wf = ref.read(workflowsProvider).firstWhere(
-              (w) => w.id == id,
-              orElse: () => ref.read(workflowProvider),
+            // Save current document before switching.
+            final currentWf = ref.read(workflowProvider);
+            final currentVp = ref.read(canvasControllerProvider);
+            ref.read(documentsProvider.notifier).update((docs) {
+              final m = Map<String, WorkflowDocument>.from(docs);
+              m[currentWf.id] = WorkflowDocument(workflow: currentWf, viewport: currentVp);
+              return m;
+            });
+            // Load selected document.
+            final doc = ref.read(documentsProvider)[id] ?? WorkflowDocument(
+              workflow: ref.read(workflowsProvider).firstWhere((w) => w.id == id),
             );
-            ref.read(workflowProvider.notifier).state = wf;
+            ref.read(workflowProvider.notifier).state = doc.workflow;
+            ref.read(canvasControllerProvider.notifier).setViewport(doc.viewport);
           },
         );
       case AppMode.active:

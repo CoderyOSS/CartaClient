@@ -40,6 +40,10 @@ class CanvasController extends StateNotifier<CanvasViewport> {
   void reset() {
     state = const CanvasViewport();
   }
+
+  void setViewport(CanvasViewport value) {
+    state = value;
+  }
 }
 
 final canvasControllerProvider =

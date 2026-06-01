@@ -16,6 +16,9 @@ enum TrailheadIconData {
   clock,
   workflow,
   x,
+  gitBranch,
+  forEach,
+  merge,
 }
 
 class TrailheadIcon extends StatelessWidget {
@@ -113,4 +116,23 @@ const Map<TrailheadIconData, String> _bodies = {
   TrailheadIconData.x:
       '<line x1="18" y1="6" x2="6" y2="18"/>'
       '<line x1="6" y1="6" x2="18" y2="18"/>',
+
+  TrailheadIconData.gitBranch:
+      '<circle cx="18" cy="18" r="3"/>'
+      '<circle cx="6" cy="6" r="3"/>'
+      '<path d="M6 21V9a9 9 0 0 0 9 9"/>',
+
+  TrailheadIconData.forEach:
+      '<circle cx="4" cy="12" r="2"/>'
+      '<circle cx="20" cy="5" r="2"/>'
+      '<circle cx="20" cy="12" r="2"/>'
+      '<circle cx="20" cy="19" r="2"/>'
+      '<path d="M6 12h6M12 5v14M12 5h6M12 12h6M12 19h6"/>',
+
+  TrailheadIconData.merge:
+      '<circle cx="4" cy="5" r="2"/>'
+      '<circle cx="4" cy="12" r="2"/>'
+      '<circle cx="4" cy="19" r="2"/>'
+      '<circle cx="20" cy="12" r="2"/>'
+      '<path d="M6 5h6M6 12h6M6 19h6M12 5v14M12 12h6"/>',
 };

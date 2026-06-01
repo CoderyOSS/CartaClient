@@ -2,12 +2,15 @@ import 'dart:math' show Random;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/workflow_document.dart';
 import '../../models/workflow_edge.dart';
 import '../../models/workflow_node.dart';
 import '../../providers/canvas_controller.dart';
 import '../../providers/mode_provider.dart';
+import '../../providers/mock_data.dart';
 import '../../providers/operator_picker_provider.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/mode_rail.dart';
 import 'connection_painter.dart';
 import 'dot_grid_painter.dart';
 import 'operator_picker.dart';
@@ -31,8 +34,36 @@ class GraphCanvas extends ConsumerWidget {
     final draggingNodeId = ref.watch(draggingNodeIdProvider);
     final dragOffset = ref.watch(dragOffsetProvider);
     final pickerAnchor = ref.watch(operatorPickerProvider);
+    final mode = ref.watch(modeProvider);
+    final editable = mode == AppMode.build;
+
+    // Sync in-place workflow edits to the document model and workflow list.
+    ref.listen<WorkflowSummary>(workflowProvider, (prev, next) {
+      if (prev != null && prev.id == next.id) {
+        final vp = ref.read(canvasControllerProvider);
+        ref.read(documentsProvider.notifier).update((docs) {
+          final m = Map<String, WorkflowDocument>.from(docs);
+          m[next.id] = WorkflowDocument(workflow: next, viewport: vp);
+          return m;
+        });
+        ref.read(workflowsProvider.notifier).update((list) {
+          return list.map((w) => w.id == next.id ? next : w).toList();
+        });
+      }
+    });
+
+    // Sync viewport movements to the active document.
+    ref.listen<CanvasViewport>(canvasControllerProvider, (prev, next) {
+      final wf = ref.read(workflowProvider);
+      ref.read(documentsProvider.notifier).update((docs) {
+        final m = Map<String, WorkflowDocument>.from(docs);
+        m[wf.id] = WorkflowDocument(workflow: wf, viewport: next);
+        return m;
+      });
+    });
 
     void showPicker(Offset worldPos, String sourceId) {
+      if (!editable) return;
       final screenX = worldPos.dx * viewport.zoom + viewport.pan.dx;
       final screenY = worldPos.dy * viewport.zoom + viewport.pan.dy;
       ref.read(operatorPickerProvider.notifier).state = PickerAnchor(
@@ -93,6 +124,7 @@ class GraphCanvas extends ConsumerWidget {
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
+        if (!editable) return KeyEventResult.ignored;
         if (event is KeyDownEvent) {
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -171,7 +203,7 @@ class GraphCanvas extends ConsumerWidget {
                               ref.read(hoveredNodeProvider.notifier).state =
                                   (hoveredNodeId == node.id) ? null : hoveredNodeId;
                             },
-                            onDelete: () => deleteNode(node.id),
+                            onDelete: editable ? () => deleteNode(node.id) : null,
                           );
 
                           return AnimatedPositioned(
@@ -193,43 +225,51 @@ class GraphCanvas extends ConsumerWidget {
                                       ref.read(operatorPickerProvider.notifier).state = null;
                                     }
                                   },
-                                  onPanStart: (_) {
-                                    ref.read(draggingNodeIdProvider.notifier).state = node.id;
-                                    ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                                  },
-                                  onPanUpdate: (details) {
-                                    if (draggingNodeId == node.id) {
-                                      final worldDelta = Offset(
-                                        details.delta.dx / viewport.zoom,
-                                        details.delta.dy / viewport.zoom,
-                                      );
-                                      ref.read(dragOffsetProvider.notifier).state += worldDelta;
-                                    }
-                                  },
-                                  onPanEnd: (_) {
-                                    if (draggingNodeId == node.id) {
-                                      final offset = ref.read(dragOffsetProvider);
-                                      final snappedX = _snap(node.x + offset.dx);
-                                      final snappedY = _snap(node.y + offset.dy);
-                                      final newNodes = workflow.nodes.map((n) {
-                                        if (n.id == node.id) {
-                                          return n.copyWith(x: snappedX, y: snappedY);
+                                  onPanStart: editable
+                                      ? (_) {
+                                          ref.read(draggingNodeIdProvider.notifier).state = node.id;
+                                          ref.read(dragOffsetProvider.notifier).state = Offset.zero;
                                         }
-                                        return n;
-                                      }).toList();
-                                      ref.read(workflowProvider.notifier).state =
-                                          workflow.copyWith(nodes: newNodes);
-                                      ref.read(draggingNodeIdProvider.notifier).state = null;
-                                      ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                                    }
-                                  },
-                                  onPanCancel: () {
-                                    ref.read(draggingNodeIdProvider.notifier).state = null;
-                                    ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                                  },
+                                      : null,
+                                  onPanUpdate: editable
+                                      ? (details) {
+                                          if (draggingNodeId == node.id) {
+                                            final worldDelta = Offset(
+                                              details.delta.dx / viewport.zoom,
+                                              details.delta.dy / viewport.zoom,
+                                            );
+                                            ref.read(dragOffsetProvider.notifier).state += worldDelta;
+                                          }
+                                        }
+                                      : null,
+                                  onPanEnd: editable
+                                      ? (_) {
+                                          if (draggingNodeId == node.id) {
+                                            final offset = ref.read(dragOffsetProvider);
+                                            final snappedX = _snap(node.x + offset.dx);
+                                            final snappedY = _snap(node.y + offset.dy);
+                                            final newNodes = workflow.nodes.map((n) {
+                                              if (n.id == node.id) {
+                                                return n.copyWith(x: snappedX, y: snappedY);
+                                              }
+                                              return n;
+                                            }).toList();
+                                            ref.read(workflowProvider.notifier).state =
+                                                workflow.copyWith(nodes: newNodes);
+                                            ref.read(draggingNodeIdProvider.notifier).state = null;
+                                            ref.read(dragOffsetProvider.notifier).state = Offset.zero;
+                                          }
+                                        }
+                                      : null,
+                                  onPanCancel: editable
+                                      ? () {
+                                          ref.read(draggingNodeIdProvider.notifier).state = null;
+                                          ref.read(dragOffsetProvider.notifier).state = Offset.zero;
+                                        }
+                                      : null,
                                   child: nodeWidget,
                                 ),
-                                if (isSelected)
+                                if (isSelected && editable)
                                   Positioned(
                                     left: 192.0 - 22.0 / viewport.zoom,
                                     top: 40.0 - 22.0 / viewport.zoom,
