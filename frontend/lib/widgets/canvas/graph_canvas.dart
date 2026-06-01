@@ -32,19 +32,6 @@ class GraphCanvas extends ConsumerWidget {
     final dragOffset = ref.watch(dragOffsetProvider);
     final pickerAnchor = ref.watch(operatorPickerProvider);
 
-    final hasSelection = selectedNodeId != null;
-    final hasHover = hoveredNodeId != null;
-
-    // Active node for handle: selection wins, then hover
-    final activeNodeId = selectedNodeId ?? hoveredNodeId;
-    final activeNode = activeNodeId != null
-        ? workflow.nodes.firstWhere((n) => n.id == activeNodeId)
-        : null;
-
-    // Handle world position (right edge, vertically centered)
-    final handleWorldX = activeNode != null ? activeNode.x + 192.0 : 0.0;
-    final handleWorldY = activeNode != null ? activeNode.y + 40.0 : 0.0;
-
     void showPicker(Offset worldPos, String sourceId) {
       final screenX = worldPos.dx * viewport.zoom + viewport.pan.dx;
       final screenY = worldPos.dy * viewport.zoom + viewport.pan.dy;
@@ -193,67 +180,72 @@ class GraphCanvas extends ConsumerWidget {
                             top: displayY,
                             duration: isDragging ? Duration.zero : _snapDuration,
                             curve: Curves.easeOutCubic,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onTap: () {
-                                ref.read(selectedNodeProvider.notifier).state =
-                                    isSelected ? null : node.id;
-                                // close picker when selecting another node
-                                if (!isSelected) {
-                                  ref.read(operatorPickerProvider.notifier).state = null;
-                                }
-                              },
-                              onPanStart: (_) {
-                                ref.read(draggingNodeIdProvider.notifier).state = node.id;
-                                ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                              },
-                              onPanUpdate: (details) {
-                                if (draggingNodeId == node.id) {
-                                  final worldDelta = Offset(
-                                    details.delta.dx / viewport.zoom,
-                                    details.delta.dy / viewport.zoom,
-                                  );
-                                  ref.read(dragOffsetProvider.notifier).state += worldDelta;
-                                }
-                              },
-                              onPanEnd: (_) {
-                                if (draggingNodeId == node.id) {
-                                  final offset = ref.read(dragOffsetProvider);
-                                  final snappedX = _snap(node.x + offset.dx);
-                                  final snappedY = _snap(node.y + offset.dy);
-                                  final newNodes = workflow.nodes.map((n) {
-                                    if (n.id == node.id) {
-                                      return n.copyWith(x: snappedX, y: snappedY);
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onTap: () {
+                                    ref.read(selectedNodeProvider.notifier).state =
+                                        isSelected ? null : node.id;
+                                    // close picker when selecting another node
+                                    if (!isSelected) {
+                                      ref.read(operatorPickerProvider.notifier).state = null;
                                     }
-                                    return n;
-                                  }).toList();
-                                  ref.read(workflowProvider.notifier).state =
-                                      workflow.copyWith(nodes: newNodes);
-                                  ref.read(draggingNodeIdProvider.notifier).state = null;
-                                  ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                                }
-                              },
-                              onPanCancel: () {
-                                ref.read(draggingNodeIdProvider.notifier).state = null;
-                                ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-                              },
-                              child: nodeWidget,
+                                  },
+                                  onPanStart: (_) {
+                                    ref.read(draggingNodeIdProvider.notifier).state = node.id;
+                                    ref.read(dragOffsetProvider.notifier).state = Offset.zero;
+                                  },
+                                  onPanUpdate: (details) {
+                                    if (draggingNodeId == node.id) {
+                                      final worldDelta = Offset(
+                                        details.delta.dx / viewport.zoom,
+                                        details.delta.dy / viewport.zoom,
+                                      );
+                                      ref.read(dragOffsetProvider.notifier).state += worldDelta;
+                                    }
+                                  },
+                                  onPanEnd: (_) {
+                                    if (draggingNodeId == node.id) {
+                                      final offset = ref.read(dragOffsetProvider);
+                                      final snappedX = _snap(node.x + offset.dx);
+                                      final snappedY = _snap(node.y + offset.dy);
+                                      final newNodes = workflow.nodes.map((n) {
+                                        if (n.id == node.id) {
+                                          return n.copyWith(x: snappedX, y: snappedY);
+                                        }
+                                        return n;
+                                      }).toList();
+                                      ref.read(workflowProvider.notifier).state =
+                                          workflow.copyWith(nodes: newNodes);
+                                      ref.read(draggingNodeIdProvider.notifier).state = null;
+                                      ref.read(dragOffsetProvider.notifier).state = Offset.zero;
+                                    }
+                                  },
+                                  onPanCancel: () {
+                                    ref.read(draggingNodeIdProvider.notifier).state = null;
+                                    ref.read(dragOffsetProvider.notifier).state = Offset.zero;
+                                  },
+                                  child: nodeWidget,
+                                ),
+                                if (isSelected)
+                                  Positioned(
+                                    left: 192.0 - 22.0 / viewport.zoom,
+                                    top: 40.0 - 22.0 / viewport.zoom,
+                                    child: _OutputHandle(
+                                      inverseZoom: 1.0 / viewport.zoom,
+                                      onTap: () => showPicker(
+                                        Offset(displayX + 192.0, displayY + 40.0),
+                                        node.id,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           );
                         }),
-                        // Output handle (counter-scaled to stay constant visual size)
-                        if ((hasSelection || hasHover) && activeNode != null)
-                          Positioned(
-                            left: handleWorldX - 22.0 / viewport.zoom,
-                            top: handleWorldY - 22.0 / viewport.zoom,
-                            child: _OutputHandle(
-                              inverseZoom: 1.0 / viewport.zoom,
-                              onTap: () => showPicker(
-                                Offset(handleWorldX, handleWorldY),
-                                activeNodeId!,
-                              ),
-                            ),
-                          ),
+
                       ],
                     ),
                   ),
@@ -296,7 +288,7 @@ class _OutputHandle extends StatelessWidget {
     final glowBlur = 8.0 * inverseZoom;
 
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      behavior: HitTestBehavior.translucent,
       onTap: onTap,
       child: Container(
         width: size,
