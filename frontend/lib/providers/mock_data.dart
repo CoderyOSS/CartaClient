@@ -1,3 +1,4 @@
+import '../models/workflow_edge.dart';
 import '../models/workflow_node.dart';
 
 enum JobState { running, paused, passed, failed, cancelled, queued, retrying }
@@ -12,6 +13,7 @@ class WorkflowSummary {
   final String last;
   final int active;
   final List<WorkflowNode> nodes;
+  final List<WorkflowEdge> edges;
 
   const WorkflowSummary({
     required this.id,
@@ -23,7 +25,34 @@ class WorkflowSummary {
     this.last = '',
     this.active = 0,
     this.nodes = const [],
+    this.edges = const [],
   });
+
+  WorkflowSummary copyWith({
+    String? id,
+    String? name,
+    int? version,
+    int? draft,
+    String? updated,
+    int? runCount,
+    String? last,
+    int? active,
+    List<WorkflowNode>? nodes,
+    List<WorkflowEdge>? edges,
+  }) {
+    return WorkflowSummary(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      version: version ?? this.version,
+      draft: draft ?? this.draft,
+      updated: updated ?? this.updated,
+      runCount: runCount ?? this.runCount,
+      last: last ?? this.last,
+      active: active ?? this.active,
+      nodes: nodes ?? this.nodes,
+      edges: edges ?? this.edges,
+    );
+  }
 }
 
 class JobSummary {
@@ -66,10 +95,11 @@ final mockWorkflow = WorkflowSummary(
       id: 'entrypoint',
       kind: 'worker',
       label: 'entrypoint',
-      x: 400,
-      y: 300,
+      x: 0,
+      y: 0,
     ),
   ],
+  edges: const [],
 );
 
 final mockWorkflows = <WorkflowSummary>[
@@ -82,9 +112,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 1284,
     last: '2m',
     active: 2,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
   WorkflowSummary(
     id: 'wf_eval_harness',
@@ -94,9 +125,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 412,
     last: '11m',
     active: 0,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
   WorkflowSummary(
     id: 'wf_release_notes',
@@ -106,9 +138,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 38,
     last: '1h',
     active: 0,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
   WorkflowSummary(
     id: 'wf_flake_tracker',
@@ -118,9 +151,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 906,
     last: '8m',
     active: 1,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
   WorkflowSummary(
     id: 'wf_changelog_summ',
@@ -130,9 +164,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 142,
     last: '3h',
     active: 0,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
   WorkflowSummary(
     id: 'wf_doc_indexer',
@@ -142,9 +177,10 @@ final mockWorkflows = <WorkflowSummary>[
     runCount: 77,
     last: '1d',
     active: 0,
-    nodes: const [
-      WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 400, y: 300),
-    ],
+      nodes: const [
+        WorkflowNode(id: 'entrypoint', kind: 'worker', label: 'entrypoint', x: 0, y: 0),
+      ],
+      edges: const [],
   ),
 ];
 

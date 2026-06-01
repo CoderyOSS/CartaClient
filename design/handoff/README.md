@@ -11,7 +11,8 @@ Everything here is generated from one source of truth: `tokens.json`.
 | `lib/theme/tokens.dart` | Typed Dart mirror of `tokens.json`. Compile-time constants for every primitive + theme palettes + accents. |
 | `lib/theme/app_theme.dart` | Material 3 `ThemeData` builder + custom `AppTokens` `ThemeExtension`. Call `appTheme(palette:, accent:)` from `MaterialApp`. |
 | `Flutter Handoff.html` | Scrollable design doc. Components rendered in isolation with anatomy + states + token references. Open this when building. |
-| `Component Catalog.html` | The same components as a deck — one component per slide. Better for "pull up the spec for the top bar" lookups. |
+| `src/` | The React/JSX sources that render `Flutter Handoff.html` (live app components + handoff doc sections). |
+| `assets/` | Brand marks referenced by the doc. |
 
 ## How to use
 
@@ -53,7 +54,7 @@ Container(
 2. **Reference semantic aliases** (`palette.surface`, not `palette.bg2`) wherever possible. They're aliased to the right `bg/fg` index in `ThemePalette`.
 3. **Sizes for canvas nodes, drawer, rail, etc. live in component-specific classes** (`CompNode`, `CompDrawer`, `CompModeRail`, etc) in `tokens.dart`. Use them.
 4. **Read `Flutter Handoff.html`** in your browser when implementing a component for the first time — the anatomy callouts show you how to compose it.
-5. **The two handoff docs share state**; the catalog deck is a reorganization of the doc, not different content.
+5. **`Flutter Handoff.html` loads the live app component tree** so the rendered specimens match production exactly — they are not redrawn mockups.
 
 ## Theme switching
 

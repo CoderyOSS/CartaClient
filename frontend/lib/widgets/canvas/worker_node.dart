@@ -2,20 +2,25 @@ import 'package:flutter/material.dart';
 import '../../models/workflow_node.dart';
 import '../../providers/mock_data.dart';
 import '../../theme/tokens.dart';
+import '../icons.dart';
 import '../status_tag.dart';
 
 class WorkerNode extends StatelessWidget {
   final WorkflowNode node;
   final JobState? status;
   final bool selected;
-  final VoidCallback? onTap;
+  final VoidCallback? onEnter;
+  final VoidCallback? onExit;
+  final VoidCallback? onDelete;
 
   const WorkerNode({
     super.key,
     required this.node,
     this.status,
     this.selected = false,
-    this.onTap,
+    this.onEnter,
+    this.onExit,
+    this.onDelete,
   });
 
   @override
@@ -59,8 +64,9 @@ class WorkerNode extends StatelessWidget {
       ];
     }
 
-    return GestureDetector(
-      onTap: onTap,
+    return MouseRegion(
+      onEnter: (_) => onEnter?.call(),
+      onExit: (_) => onExit?.call(),
       child: Container(
         width: 192,
         height: 80,
@@ -256,6 +262,37 @@ class WorkerNode extends StatelessWidget {
                           : status == JobState.failed
                               ? const Color(0xFF3d1a1a)
                               : AppColors.fg2,
+                    ),
+                  ),
+                ),
+              ),
+            // Delete button — shown when selected
+            if (selected && onDelete != null)
+              Positioned(
+                top: -8,
+                right: -8,
+                child: GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppColors.bg2,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.border2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: TrailheadIcon(
+                        icon: TrailheadIconData.x,
+                        size: 9,
+                        color: AppColors.fg2,
+                      ),
                     ),
                   ),
                 ),

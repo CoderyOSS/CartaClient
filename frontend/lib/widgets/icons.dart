@@ -15,6 +15,7 @@ enum TrailheadIconData {
   chevRight,
   clock,
   workflow,
+  x,
 }
 
 class TrailheadIcon extends StatelessWidget {
@@ -108,4 +109,8 @@ const Map<TrailheadIconData, String> _bodies = {
       '<line x1="6" y1="1" x2="6" y2="4"/>'
       '<line x1="10" y1="1" x2="10" y2="4"/>'
       '<line x1="14" y1="1" x2="14" y2="4"/>',
+
+  TrailheadIconData.x:
+      '<line x1="18" y1="6" x2="6" y2="18"/>'
+      '<line x1="6" y1="6" x2="18" y2="18"/>',
 };

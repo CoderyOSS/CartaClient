@@ -5,12 +5,13 @@ const { useState: useStateBO } = React;
 // Builder-mode affordances.
 //
 // Sits on top of the canvas's transformed world. Renders:
-//   • An output handle on every hovered / selected node — drag to connect,
-//     or click "+" to add a stage downstream
+//   • An output handle on every hovered / selected node — a single dot:
+//     tap to add a stage downstream, drag to connect (iPad-first, one target)
 //   • A "+" pin on every hovered / selected edge — click to insert an
 //     operator into the connection
 //   • A "×" delete pin alongside the edge "+"
-//   • A floating action toolbar above a selected node (duplicate / delete)
+//   • A floating "actions" button above a selected node, opening a menu
+//     (duplicate / remove + collapse / delete)
 //   • The operator picker popover that appears when any "+" is clicked
 //
 // Functionality is presentational only — clicks open the picker but do not
@@ -23,12 +24,11 @@ const ROUTING_W = 124;
 const ROUTING_H = 50;
 
 const STAGE_TYPES = [
-  { kind: "worker", label: "worker",  icon: "zap",       desc: "skills · prompt · result" },
-  { kind: "switch", label: "switch",  icon: "gitBranch", desc: "n-way enum routing" },
-  { kind: "branch", label: "branch",  icon: "gitBranch", desc: "if / else" },
-  { kind: "map",    label: "for-each",icon: "refresh",   desc: "iterate a list, fan-out" },
-  { kind: "loop",   label: "loop",    icon: "refresh",   desc: "re-enter while condition" },
-  { kind: "join",   label: "join",    icon: "workflow",  desc: "wait for N upstreams" },
+  { kind: "worker", label: "worker",  icon: "zap",     desc: "skills · prompt · result" },
+  { kind: "branch", label: "branch",  icon: "gitBranch", desc: "conditional routing" },
+  { kind: "map",    label: "for-each",icon: "forEach", desc: "iterate a list, fan-out" },
+  { kind: "loop",   label: "loop",    icon: "refresh", desc: "re-enter while condition" },
+  { kind: "join",   label: "join",    icon: "merge",   desc: "wait for N upstreams" },
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -79,46 +79,46 @@ function OutputHandle({ stage, pos, isHovered, isSelected, flow, zoom, onAdd }) 
         left: 0, top: 0,
         transform: `scale(${inv}) translate(-50%, -50%)`,
         transformOrigin: "0 0",
-        display: "flex", alignItems: "center", gap: 8,
+        display: "flex", alignItems: "center", justifyContent: "center",
         whiteSpace: "nowrap",
       }}>
-        <div
-          title="drag to connect"
+        {/* iPad-first: ONE dot carries both gestures — tap to add a stage
+            downstream (opens the picker), drag to wire a connection. No
+            separate "+" target to mis-hit on touch. A 44px transparent hit
+            area is padded around the 12px visual dot (negative margin keeps
+            the dot visually centered on the border). */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAdd({ x, y }); }}
+          title="tap to add a stage · drag to connect"
           style={{
+            width: 44, height: 44,
+            margin: -16,
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "crosshair",
+          }}
+        >
+          <span style={{
             width: 12, height: 12,
             borderRadius: 999,
             background: "var(--co-accent)",
             border: "2px solid var(--co-bg-1)",
             boxShadow: "0 0 0 1px var(--co-accent), 0 0 8px color-mix(in oklab, var(--co-accent) 50%, transparent)",
-            cursor: "crosshair",
             flex: "0 0 12px",
-          }}
-        />
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onAdd({ x, y }); }}
-          title="add next stage"
-          style={{
-            width: 22, height: 22,
-            padding: 0,
-            borderRadius: 999,
-            background: "var(--co-bg-2)",
-            border: "1px dashed var(--co-accent)",
-            color: "var(--co-accent)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 600,
-            cursor: "pointer",
-            lineHeight: 1,
-          }}
-        >+</button>
+          }} />
+        </button>
       </div>
     </div>
   );
 }
 
-function NodeToolbar({ stage, pos, zoom, onDuplicate, onDelete }) {
+function NodeToolbar({ stage, pos, zoom, onDuplicate, onDelete, onRemoveCollapse }) {
   const cx = pos.x + (NODE_W / 2);
   const inv = 1 / zoom;
+  const [menuOpen, setMenuOpen] = useStateBO(false);
   return (
     <div style={{
       position: "absolute",
@@ -130,101 +130,172 @@ function NodeToolbar({ stage, pos, zoom, onDuplicate, onDelete }) {
         position: "absolute", left: 0, top: 0,
         transform: `scale(${inv}) translate(-50%, calc(-100% - 14px))`,
         transformOrigin: "0 0",
-        display: "inline-flex", alignItems: "center",
-        gap: 2,
-        padding: 3,
-        background: "var(--co-bg-1)",
-        border: "1px solid var(--co-border-2)",
-        borderRadius: 6,
-        boxShadow: "var(--co-shadow-2)",
-        whiteSpace: "nowrap",
       }}>
-        <ToolbarBtn icon="copy" label="duplicate" onClick={onDuplicate} />
-        <span style={{ width: 1, height: 16, background: "var(--co-border-1)" }} />
-        <ToolbarBtn icon="x" label="delete" danger onClick={onDelete} />
+        {/* relative wrapper anchors the dropdown under the trigger */}
+        <div style={{ position: "relative", display: "inline-block" }}>
+          <ToolbarTrigger active={menuOpen} onClick={() => setMenuOpen(o => !o)} />
+          {menuOpen && (
+            <ToolbarMenu
+              onClose={() => setMenuOpen(false)}
+              items={[
+                { icon: "copy", label: "duplicate", desc: "clone this node downstream", onClick: onDuplicate },
+                { icon: "collapseLink", label: "remove + collapse", desc: "delete & rewire parent → child", onClick: onRemoveCollapse },
+                { divider: true },
+                { icon: "x", label: "delete node", desc: "removes its connections too", danger: true, onClick: onDelete },
+              ]}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ToolbarBtn({ icon, label, danger, onClick }) {
+function ToolbarMenu({ items, onClose }) {
+  return (
+    <>
+      {/* click-away catcher */}
+      <div onClick={(e) => { e.stopPropagation(); onClose(); }}
+        style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+      <div style={{
+        position: "absolute", left: 0, top: "100%", marginTop: 6,
+        zIndex: 2,
+        minWidth: 196,
+        background: "var(--co-bg-1)",
+        border: "1px solid var(--co-border-2)",
+        borderRadius: 8,
+        boxShadow: "var(--co-shadow-3)",
+        padding: 4,
+        whiteSpace: "nowrap",
+      }}>
+        {items.map((it, i) => it.divider
+          ? <span key={i} style={{ display: "block", height: 1, margin: "4px 6px", background: "var(--co-border-1)" }} />
+          : <MenuItem key={i} {...it} onClose={onClose} />
+        )}
+      </div>
+    </>
+  );
+}
+
+function MenuItem({ icon, label, desc, danger, onClick, onClose }) {
   const [hover, setHover] = useStateBO(false);
   return (
     <button
       type="button"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
-      title={label}
+      onClick={(e) => { e.stopPropagation(); onClick?.(); onClose?.(); }}
       style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: "3px 7px",
+        width: "100%",
+        display: "grid", gridTemplateColumns: "20px 1fr", alignItems: "center", gap: 9,
+        padding: "6px 8px",
         background: hover ? (danger ? "var(--co-danger-soft)" : "var(--co-bg-3)") : "transparent",
-        border: "none", borderRadius: 4,
-        color: hover && danger ? "var(--co-danger)" : "var(--co-text)",
-        cursor: "pointer",
-        fontFamily: "var(--co-font-sans)", fontSize: 11,
+        border: "none", borderRadius: 5,
+        cursor: "pointer", textAlign: "left",
+        color: danger ? "var(--co-danger)" : "var(--co-text)",
       }}
     >
-      <Icon name={icon} size={11} color="currentColor" />
-      {label}
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon name={icon} size={14} color="currentColor" />
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+        <span style={{ fontFamily: "var(--co-font-sans)", fontSize: 12, fontWeight: 500 }}>{label}</span>
+        <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 9.5, color: danger ? "color-mix(in oklab, var(--co-danger) 70%, var(--co-text-subtle))" : "var(--co-text-subtle)" }}>{desc}</span>
+      </span>
     </button>
   );
 }
 
-function EdgeAffordance({ edgeKey, mid, isHovered, isSelected, zoom, onInsert, onDelete }) {
+function ToolbarTrigger({ active, onClick }) {
+  const [hover, setHover] = useStateBO(false);
+  return (
+    <button
+      type="button"
+      title="node actions"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4,
+        height: 28, padding: "0 9px",
+        background: (active || hover) ? "var(--co-bg-3)" : "var(--co-bg-1)",
+        border: "1px solid var(--co-border-2)",
+        borderRadius: 6,
+        boxShadow: "var(--co-shadow-2)",
+        color: active ? "var(--co-text-strong)" : "var(--co-text)",
+        cursor: "pointer",
+        fontFamily: "var(--co-font-sans)", fontSize: 11, fontWeight: 500,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Icon name="moreVertical" size={14} color="currentColor" />
+      actions
+    </button>
+  );
+}
+
+function EdgeAffordance({ edgeKey, mid, srcAnchor, isHovered, isSelected, zoom, onInsert, onDelete }) {
   if (!mid) return null;
   if (!isHovered && !isSelected) return null;
   const inv = 1 / zoom;
+  // Two separate controls (iPad-first — keep them apart so neither is hard to
+  // hit): the + insert sits centered ON the parent node's output border, the
+  // × delete sits at the center of the connection.
+  const insertAt = srcAnchor || mid;
   return (
-    <div style={{
-      position: "absolute",
-      left: mid.x, top: mid.y,
-      width: 0, height: 0,
-      pointerEvents: "auto",
-    }}>
-      <div style={{
-        position: "absolute", left: 0, top: 0,
-        transform: `scale(${inv}) translate(-50%, -50%)`,
-        transformOrigin: "0 0",
-        display: "inline-flex", alignItems: "center",
-        gap: 4,
-      }}>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onInsert({ x: mid.x, y: mid.y }); }}
-          title="insert operator on this connection"
-          style={{
-            width: 24, height: 24, padding: 0,
-            borderRadius: 999,
-            background: "var(--co-accent)",
-            border: "2px solid var(--co-bg-1)",
-            boxShadow: "0 0 0 1px var(--co-accent), 0 2px 8px rgba(0,0,0,0.4)",
-            color: "var(--co-accent-ink)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 700,
-            cursor: "pointer",
-            lineHeight: 1,
-          }}
-        >+</button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(edgeKey); }}
-          title="delete this connection"
-          style={{
-            width: 20, height: 20, padding: 0,
-            borderRadius: 999,
-            background: "var(--co-bg-1)",
-            border: "1px solid var(--co-danger)",
-            color: "var(--co-danger)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-          }}
-        >
-          <Icon name="x" size={10} color="currentColor" />
-        </button>
+    <>
+      {/* + insert — on the parent node's output border */}
+      <div style={{ position: "absolute", left: insertAt.x, top: insertAt.y, width: 0, height: 0, pointerEvents: "auto" }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0,
+          transform: `scale(${inv}) translate(-50%, -50%)`,
+          transformOrigin: "0 0",
+        }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onInsert({ x: insertAt.x, y: insertAt.y }); }}
+            title="insert operator on this connection"
+            style={{
+              width: 24, height: 24, padding: 0,
+              borderRadius: 999,
+              background: "var(--co-accent)",
+              border: "2px solid var(--co-bg-1)",
+              boxShadow: "0 0 0 1px var(--co-accent), 0 2px 8px rgba(0,0,0,0.4)",
+              color: "var(--co-accent-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 700,
+              cursor: "pointer",
+              lineHeight: 1,
+            }}
+          >+</button>
+        </div>
       </div>
-    </div>
+      {/* × delete — at the center of the connection */}
+      <div style={{ position: "absolute", left: mid.x, top: mid.y, width: 0, height: 0, pointerEvents: "auto" }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0,
+          transform: `scale(${inv}) translate(-50%, -50%)`,
+          transformOrigin: "0 0",
+        }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(edgeKey); }}
+            title="delete this connection"
+            style={{
+              width: 20, height: 20, padding: 0,
+              borderRadius: 999,
+              background: "var(--co-bg-1)",
+              border: "1px solid var(--co-danger)",
+              color: "var(--co-danger)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="x" size={10} color="currentColor" />
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -372,9 +443,9 @@ function BuilderTips() {
         }}><Icon name="x" size={10} color="currentColor" /></button>
       </div>
       <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
-        <TipRow icon="+" label="hover a node" desc="drag the handle or click + to add a stage downstream" />
-        <TipRow icon="+" label="hover a connection" desc="click + to insert an operator on the edge" />
-        <TipRow icon="×" label="click a node or edge" desc="floating toolbar to duplicate or delete" />
+        <TipRow icon="+" label="select a node" desc="tap the handle dot to add a stage downstream, or drag it to connect" />
+        <TipRow icon="+" label="select a connection" desc="tap + to insert an operator on the edge" />
+        <TipRow icon="×" label="click a node or edge" desc="floating actions menu to duplicate, collapse, or delete" />
       </div>
     </div>
   );
@@ -430,6 +501,7 @@ function BuilderOverlay({
                 stage={s} pos={p} zoom={zoom}
                 onDuplicate={() => {}}
                 onDelete={() => {}}
+                onRemoveCollapse={() => {}}
               />
             )}
           </React.Fragment>
@@ -440,13 +512,31 @@ function BuilderOverlay({
       {workflow.edges.map((edge, i) => {
         const key = `${edge.from}→${edge.to}`;
         const mid = edgeMidpoint(edgePaths[key] || "");
+        // The + insert anchors on the PARENT node's output border. Unified
+        // selection: an edge is "selected" whenever its parent node is, so
+        // there's no thin line to tap on its own (iPad-first).
+        const srcPos = positions[edge.from];
+        const srcStage = workflow.stages.find(st => st.id === edge.from);
+        let srcAnchor = null;
+        if (srcPos) {
+          const isRouting = srcStage && srcStage.kind !== "worker";
+          const w = isRouting ? ROUTING_W : NODE_W;
+          const h = isRouting ? ROUTING_H : NODE_H;
+          const cx = srcPos.x + (NODE_W / 2);
+          const cy = srcPos.y + (NODE_H / 2);
+          srcAnchor = (flow !== "vertical")
+            ? { x: srcPos.x + (isRouting ? (NODE_W + w) / 2 : w), y: cy }
+            : { x: cx, y: srcPos.y + (isRouting ? (NODE_H + h) / 2 : h) };
+        }
+        const parentSelected = selectedNodeId === edge.from;
         return (
           <EdgeAffordance
             key={i}
             edgeKey={key}
             mid={mid}
-            isHovered={hoveredEdgeKey === key}
-            isSelected={selectedEdgeKey === key}
+            srcAnchor={srcAnchor}
+            isHovered={hoveredEdgeKey === key || hoveredNodeId === edge.from}
+            isSelected={selectedEdgeKey === key || parentSelected}
             zoom={zoom}
             onInsert={(anchor) => setPicker({ kind: "insert-edge", anchor, edgeKey: key })}
             onDelete={onDeleteEdge}

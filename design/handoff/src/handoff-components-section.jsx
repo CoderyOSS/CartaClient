@@ -821,20 +821,22 @@ function GraphNodesCard() {
         <StatesGrid columns={4} items={[
           { label: "default",                 children: <WNodeWrap stage={DEMO_WORKER} /> },
           { label: "selected",                children: <WNodeWrap stage={DEMO_WORKER} selected /> },
-          { label: "running · glow",          children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "running", progress: 0.55 }} /> },
+          { label: "running · progress",      children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "running", progress: 0.55 }} /> },
+          { label: "running · spinner",       children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "running" }} /> },
           { label: "compact · 168×60",        children: <WNodeWrap stage={DEMO_WORKER} density="compact" /> },
           { label: "passed",                  children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "passed" }} /> },
           { label: "failed",                  children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "failed" }} /> },
           { label: "selected · passed",       children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "passed" }} selected /> },
-          { label: "selected · failed",       children: <WNodeWrap stage={DEMO_WORKER} status={{ status: "failed" }} selected /> },
         ]} />
+        <p style={{ margin: "12px 2px 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--co-text-subtle)" }}>
+          <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>Running vs selected.</strong> Selected is a static crisp accent ring; running is a slow breathing accent halo plus a solid <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>running</strong> pill in the top-right corner — the same solid-fill treatment, in the same slot, as the passed / failed tags, so every state reads identically and the label always sits centered on the node's top border. The running pill carries a small rotating ring spinner. The two never read alike, even on the same node. Running comes in two flavors: a determinate <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>progress</strong> bar when an estimate exists, or a <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>spinner</strong>-only state when it doesn't. A selected node also surfaces builder affordances — the output-handle dot and the floating node toolbar. See <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>Builder affordances</strong> below.
+        </p>
       </SubBlock>
 
       <SubBlock label="routing operators · pill-shaped · 124×50px in a 192×80 footprint">
         <Stage padding={20}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
             {[
-              { kind: "switch", sub: "model.tier",  label: "switch" },
               { kind: "branch", sub: "score ≥ 0.8", label: "branch" },
               { kind: "map",    sub: "file list",   label: "map" },
               { kind: "loop",   sub: "max 5 iters", label: "loop" },
@@ -850,12 +852,12 @@ function GraphNodesCard() {
           right={(
             <AnatomyLegend items={[
               { label: "status rail",   desc: "3px left edge · colored by run status · full height" },
+              { label: "status tag",    desc: "top-right · solid-fill pill straddling the top border · passed / failed / running / skipped · label centered on the border line" },
               { label: "label",         desc: "mono 13px (compact 12px) · weight 600 · truncated" },
               { label: "model badge",   desc: "mono 9px · bg4 · hidden in compact density" },
               { label: "sub",           desc: "11.5px (compact 10.5px) · textSubtle · single line" },
               { label: "skills row",    desc: "mono 9px chips · first 3 shown + overflow count · hidden compact" },
-              { label: "progress bar",  desc: "2px bottom strip · accent gradient · running only" },
-              { label: "status badge",  desc: "9px pill top-right · passed / failed / skipped only" },
+              { label: "progress bar",  desc: "2px bottom strip · accent gradient · determinate running only" },
             ]} />
           )}
         />
@@ -870,10 +872,11 @@ function GraphNodesCard() {
           { name: "bg.running",        value: "accent 12% mix into bg2 → bg2 at 70%" },
           { name: "border.default",    value: "1px palette.border2" },
           { name: "border.selected",   value: "1px accent · outer: 1px accent + 4px accent 22% + shadow-1" },
+          { name: "halo.running",      value: "breathing glow · co-node-running-glow 1.7s ease-in-out · NOT the static selected ring" },
+          { name: "statusTag.run",    value: "solid accent pill in top-right slot · h 16px · top -8 (centered on border) · mono 9px/600 · leading 10px ring spinner via co-spin 0.8s linear · identical solid treatment for passed / failed / skipped" },
           { name: "statusRail.width",  value: "3px · colorKeyed to run status" },
           { name: "label.font",        value: "AppType.mono · 13px · weight 600" },
-          { name: "badge.font",        value: "AppType.mono · 9px · radius 999 · colorKeyed" },
-          { name: "progressBar",       value: "h 2px · bottom 3px · l/r 6px · palette.crustGradient" },
+          { name: "progressBar",       value: "h 2px · bottom 3px · l/r 6px · palette.crustGradient · determinate running only" },
         ]} />
       </SubBlock>
     </Card>
@@ -1055,11 +1058,10 @@ function GraphCanvasCard() {
 
 const PICKER_TYPES = [
   { kind: "worker", label: "worker",   icon: "zap",       desc: "skills · prompt · result" },
-  { kind: "switch", label: "switch",   icon: "gitBranch", desc: "n-way enum routing" },
-  { kind: "branch", label: "branch",   icon: "gitBranch", desc: "if / else" },
-  { kind: "map",    label: "for-each", icon: "refresh",   desc: "iterate a list, fan-out" },
+  { kind: "branch", label: "branch",   icon: "gitBranch", desc: "conditional routing" },
+  { kind: "map",    label: "for-each", icon: "forEach",   desc: "iterate a list, fan-out" },
   { kind: "loop",   label: "loop",     icon: "refresh",   desc: "re-enter while condition" },
-  { kind: "join",   label: "join",     icon: "workflow",  desc: "wait for N upstreams" },
+  { kind: "join",   label: "join",     icon: "merge",     desc: "wait for N upstreams" },
 ];
 
 function OperatorPickerMock() {
@@ -1116,111 +1118,335 @@ function OperatorPickerMock() {
   );
 }
 
+// ── in-situ affordance scenes ───────────────────────────────────────────
+// Each affordance is shown positioned on a real node / edge exactly where it
+// renders in the live BuilderOverlay, so the "where" is unambiguous.
+
+const AFF_NODE_W = 192;
+const AFF_NODE_H = 80;
+
+const DEMO_WORKER2 = {
+  id: "demo_w2", kind: "worker",
+  label: "post_review",
+  sub: "summarize · comment",
+  model: "haiku",
+  skills: ["pr.summarize", "git.comment"],
+};
+
+// reusable affordance visuals (shared by every scene) ----------------------
+function HandleDot() {
+  return (
+    <div style={{
+      width: 12, height: 12, borderRadius: 999,
+      background: "var(--co-accent)",
+      border: "2px solid var(--co-bg-1)",
+      boxShadow: "0 0 0 1px var(--co-accent), 0 0 8px color-mix(in oklab, var(--co-accent) 50%, transparent)",
+      flexShrink: 0,
+    }} />
+  );
+}
+
+function EdgeInsertBtn() {
+  return (
+    <button type="button" style={{
+      width: 24, height: 24, padding: 0, borderRadius: 999,
+      background: "var(--co-accent)", border: "2px solid var(--co-bg-1)",
+      boxShadow: "0 0 0 1px var(--co-accent), 0 2px 8px rgba(0,0,0,0.4)",
+      color: "var(--co-accent-ink)", display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1,
+    }}>+</button>
+  );
+}
+
+function EdgeDeleteBtn() {
+  return (
+    <button type="button" style={{
+      width: 20, height: 20, padding: 0, borderRadius: 999,
+      background: "var(--co-bg-1)", border: "1px solid var(--co-danger)",
+      color: "var(--co-danger)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+    }}><Icon name="x" size={10} color="currentColor" /></button>
+  );
+}
+
+// Output handle — a SINGLE solid dot centered on the node's border. On an
+// iPad-first / touch UI a single target is more reliable than two adjacent
+// hit areas, so the one dot carries both gestures: tap = add downstream,
+// drag = wire a connection.
+function HandleOnBorder({ borderX, cy }) {
+  return (
+    <div style={{ position: "absolute", left: borderX, top: cy, transform: "translate(-50%, -50%)" }}>
+      <HandleDot />
+    </div>
+  );
+}
+
+function MiniToolbar({ menuOpen = true }) {
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        height: 28, padding: "0 9px",
+        background: menuOpen ? "var(--co-bg-3)" : "var(--co-bg-1)",
+        border: "1px solid var(--co-border-2)",
+        borderRadius: 6, boxShadow: "var(--co-shadow-2)",
+        color: menuOpen ? "var(--co-text-strong)" : "var(--co-text)",
+        fontFamily: "var(--co-font-sans)", fontSize: 11, fontWeight: 500,
+        whiteSpace: "nowrap",
+      }}>
+        <Icon name="moreVertical" size={14} color="currentColor" />actions
+      </span>
+      {menuOpen && (
+        <div style={{
+          position: "absolute", left: 0, top: "100%", marginTop: 6,
+          minWidth: 196,
+          background: "var(--co-bg-1)", border: "1px solid var(--co-border-2)",
+          borderRadius: 8, boxShadow: "var(--co-shadow-3)", padding: 4,
+          whiteSpace: "nowrap",
+        }}>
+          <MiniMenuItem icon="copy" label="duplicate" desc="clone this node downstream" />
+          <MiniMenuItem icon="collapseLink" label="remove + collapse" desc="delete & rewire parent → child" />
+          <span style={{ display: "block", height: 1, margin: "4px 6px", background: "var(--co-border-1)" }} />
+          <MiniMenuItem icon="x" label="delete node" desc="removes its connections too" danger />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniMenuItem({ icon, label, desc, danger }) {
+  return (
+    <div style={{
+      width: "100%",
+      display: "grid", gridTemplateColumns: "20px 1fr", alignItems: "center", gap: 9,
+      padding: "6px 8px", borderRadius: 5,
+      color: danger ? "var(--co-danger)" : "var(--co-text)",
+    }}>
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon name={icon} size={14} color="currentColor" />
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+        <span style={{ fontFamily: "var(--co-font-sans)", fontSize: 12, fontWeight: 500 }}>{label}</span>
+        <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 9.5, color: danger ? "color-mix(in oklab, var(--co-danger) 70%, var(--co-text-subtle))" : "var(--co-text-subtle)" }}>{desc}</span>
+      </span>
+    </div>
+  );
+}
+
+// "when / where / action" descriptor shown beside each scene ---------------
+function WhenWhere({ rows }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "58px 1fr", gap: 10, alignItems: "baseline" }}>
+          <span style={{
+            fontFamily: "var(--co-font-mono)", fontSize: 9.5, fontWeight: 600,
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            color: "var(--co-accent)", paddingTop: 1,
+          }}>{r.k}</span>
+          <span style={{ fontSize: 12.5, lineHeight: 1.45, color: "var(--co-text-muted)" }}>{r.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// scenes -------------------------------------------------------------------
+function OutputHandleScene() {
+  const nx = 22, ny = 22;
+  const rightX = nx + AFF_NODE_W;
+  const cy = ny + AFF_NODE_H / 2;
+  return (
+    <div style={{ position: "relative", width: 300, height: 124 }}>
+      <WorkerNode stage={DEMO_WORKER} status={null} info={{ x: nx, y: ny }} selected density="default" onClick={() => {}} />
+      <HandleOnBorder borderX={rightX} cy={cy} />
+    </div>
+  );
+}
+
+function ToolbarScene() {
+  const nx = 54, ny = 92;
+  const cx = nx + AFF_NODE_W / 2;
+  return (
+    <div style={{ position: "relative", width: 320, height: 188 }}>
+      <WorkerNode stage={DEMO_WORKER} status={null} info={{ x: nx, y: ny }} selected density="default" onClick={() => {}} />
+      <div style={{
+        position: "absolute", left: cx, top: ny,
+        transform: "translate(-50%, calc(-100% - 14px))",
+      }}>
+        <MiniToolbar />
+      </div>
+    </div>
+  );
+}
+
+function EdgeScene() {
+  const ay = 22;
+  const aR = AFF_NODE_W;       // parent node right edge (node A at x = 0)
+  const bX = 300;             // child node left edge — widened so the + (on the
+                              // parent border) and the × (edge center) sit well apart
+  const cy = ay + AFF_NODE_H / 2;
+  const midX = (aR + bX) / 2; // center of the connection
+  const W = bX + AFF_NODE_W + 8;
+  const d = `M ${aR} ${cy} C ${aR + 28} ${cy}, ${bX - 28} ${cy}, ${bX} ${cy}`;
+  return (
+    <div style={{ position: "relative", width: W, height: 124 }}>
+      <svg width={W} height={124} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        <defs>
+          <marker id="aff-edge-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--co-accent)" />
+          </marker>
+        </defs>
+        <path d={d} fill="none" stroke="var(--co-accent)" strokeWidth={2} markerEnd="url(#aff-edge-arrow)" />
+      </svg>
+      <WorkerNode stage={DEMO_WORKER}  status={null} info={{ x: 0,  y: ay }} selected density="default" onClick={() => {}} />
+      <WorkerNode stage={DEMO_WORKER2} status={null} info={{ x: bX, y: ay }} density="default" onClick={() => {}} />
+      {/* + insert — centered ON the parent node's output border */}
+      <div style={{ position: "absolute", left: aR, top: cy, transform: "translate(-50%, -50%)" }}>
+        <EdgeInsertBtn />
+      </div>
+      {/* × delete — centered on the connection (edge midpoint) */}
+      <div style={{ position: "absolute", left: midX, top: cy, transform: "translate(-50%, -50%)" }}>
+        <EdgeDeleteBtn />
+      </div>
+    </div>
+  );
+}
+
+function PickerScene() {
+  const nx = 30, ny = 16;
+  const rightX = nx + AFF_NODE_W;
+  const cy = ny + AFF_NODE_H / 2;
+  // The live overlay centers the picker on the CLICK ANCHOR — for an
+  // after-node add that anchor is the node's right-edge midpoint (rightX),
+  // not the "+" glyph. Match that exactly.
+  const pickerCx = rightX;
+  return (
+    <div style={{ position: "relative", width: 380, height: 320 }}>
+      <WorkerNode stage={DEMO_WORKER} status={null} info={{ x: nx, y: ny }} selected density="default" onClick={() => {}} />
+      <HandleOnBorder borderX={rightX} cy={cy} />
+      <div style={{
+        position: "absolute", left: pickerCx, top: cy + 14,
+        transform: "translate(-50%, 0)",
+      }}>
+        <OperatorPickerMock />
+      </div>
+    </div>
+  );
+}
+
 function BuilderAffordancesCard() {
   return (
     <Card
       title="Builder affordances"
-      description="Zoom-invariant overlays that only appear in build mode. Output handles on nodes for connecting, insert/delete pins on edges, a floating node toolbar on selection, and the operator picker popover."
+      description="Zoom-invariant overlays that only appear in build mode. Each is shown in situ on a real node or edge — with when it appears and where it anchors. All overlays counter-scale (transform: scale(1/zoom)) so they keep a constant pixel size at any zoom."
       dartImport="lib/widgets/canvas/builder_overlay.dart · operator_picker.dart"
     >
-      <SubBlock label="output handle · appears on hover/select · drag dot to connect · + to add downstream">
-        <Stage padding={28} height={100}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "var(--co-accent)",
-              border: "2px solid var(--co-bg-1)",
-              boxShadow: "0 0 0 1px var(--co-accent), 0 0 8px color-mix(in oklab, var(--co-accent) 50%, transparent)",
-              flexShrink: 0,
-            }} />
-            <button type="button" style={{
-              width: 22, height: 22, padding: 0, borderRadius: 999,
-              background: "var(--co-bg-2)", border: "1px dashed var(--co-accent)",
-              color: "var(--co-accent)", display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 600, cursor: "pointer",
-            }}>+</button>
-            <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10.5, color: "var(--co-text-subtle)" }}>
-              counter-scaled · constant pixel size at any zoom
-            </span>
-          </div>
-        </Stage>
+      <SubBlock label="output handle · one dot · tap to add · drag to connect">
+        <StageSplit
+          leftFlex={1.5}
+          left={(
+            <Stage label="on a selected / hovered node" padding={20} height={150}>
+              <OutputHandleScene />
+            </Stage>
+          )}
+          right={(
+            <WhenWhere rows={[
+              { k: "when",    v: "the node is hovered or selected" },
+              { k: "where",   v: "a single solid dot, centered on the node's right-edge border (bottom edge in tree layout)" },
+              { k: "tap",     v: "adds a stage downstream — opens the operator picker" },
+              { k: "drag",    v: "drags out a connection to wire this node to another" },
+              { k: "touch",   v: "iPad-first — one target, no adjacent + button to mis-hit. Visual dot is 12px; hit area is padded to ≥44px" },
+            ]} />
+          )}
+        />
       </SubBlock>
 
-      <SubBlock label="edge affordance · midpoint · + insert operator · × delete edge">
-        <Stage padding={28} height={100}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <button type="button" style={{
-              width: 24, height: 24, padding: 0, borderRadius: 999,
-              background: "var(--co-accent)", border: "2px solid var(--co-bg-1)",
-              boxShadow: "0 0 0 1px var(--co-accent), 0 2px 8px rgba(0,0,0,0.4)",
-              color: "var(--co-accent-ink)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--co-font-mono)", fontSize: 14, fontWeight: 700, cursor: "pointer",
-            }}>+</button>
-            <button type="button" style={{
-              width: 20, height: 20, padding: 0, borderRadius: 999,
-              background: "var(--co-bg-1)", border: "1px solid var(--co-danger)",
-              color: "var(--co-danger)",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-            }}><Icon name="x" size={10} color="currentColor" /></button>
-            <span style={{ marginLeft: 6, fontFamily: "var(--co-font-mono)", fontSize: 10.5, color: "var(--co-text-subtle)" }}>
-              24px accent insert · 20px danger delete
-            </span>
-          </div>
-        </Stage>
+      <SubBlock label="edge affordance · + on parent border · × on connection center">
+        <StageSplit
+          leftFlex={1.5}
+          left={(
+            <Stage label="parent node selected → its connections too" padding={20} height={150}>
+              <EdgeScene />
+            </Stage>
+          )}
+          right={(
+            <WhenWhere rows={[
+              { k: "when",   v: "the parent node is selected — its output connections are selected with it, so there is no thin edge line to tap on its own" },
+              { k: "insert", v: "the accent + dot sits centered on the parent node's output border; tap to insert an operator into the connection" },
+              { k: "delete", v: "the danger × sits at the center of the connection; tap to remove the edge" },
+              { k: "touch",  v: "iPad-first — one selection state (node + its edges) means fewer, larger, well-separated targets" },
+            ]} />
+          )}
+        />
       </SubBlock>
 
-      <SubBlock label="node toolbar · floating above selected node · duplicate + delete">
-        <Stage padding={28} height={100}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
-            background: "var(--co-bg-1)", border: "1px solid var(--co-border-2)",
-            borderRadius: 6, boxShadow: "var(--co-shadow-2)",
-          }}>
-            {[
-              { icon: "copy", label: "duplicate", danger: false },
-              null,
-              { icon: "x",    label: "delete",    danger: true },
-            ].map((item, i) => item === null
-              ? <span key={i} style={{ width: 1, height: 16, background: "var(--co-border-1)" }} />
-              : (
-                <button key={i} type="button" style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  padding: "3px 7px", background: "transparent", border: "none", borderRadius: 4,
-                  color: item.danger ? "var(--co-danger)" : "var(--co-text)",
-                  cursor: "pointer", fontFamily: "var(--co-font-sans)", fontSize: 11,
-                }}>
-                  <Icon name={item.icon} size={11} color="currentColor" />
-                  {item.label}
-                </button>
-              )
-            )}
-          </div>
-        </Stage>
+      <SubBlock label="node toolbar · duplicate + actions menu">
+        <StageSplit
+          leftFlex={1.5}
+          left={(
+            <Stage label="on the selected node only" padding={20} height={210}>
+              <ToolbarScene />
+            </Stage>
+          )}
+          right={(
+            <WhenWhere rows={[
+              { k: "when",   v: "the node is selected (does not show on hover alone)" },
+              { k: "where",  v: "floats centered, 14px above the node's top edge" },
+              { k: "trigger", v: "a single \u201cactions\u201d button (\u22ee glyph + label) — there are no floating one-tap actions; everything lives in the menu" },
+              { k: "menu",   v: "duplicate — clones the node downstream. remove + collapse — deletes the node and rewires its parent's output straight into the child's input, healing the connection. delete node — removes the node and its connections (danger)." },
+            ]} />
+          )}
+        />
       </SubBlock>
 
-      <SubBlock label="operator picker · screen-space popover · shown on + click">
-        <Stage padding={20} height={330}>
-          <OperatorPickerMock />
-        </Stage>
+      <SubBlock label="operator picker · screen-space popover · shown on dot tap">
+        <StageSplit
+          leftFlex={1.5}
+          left={(
+            <Stage label="opens from a handle tap or edge +" padding={20} height={350}>
+              <PickerScene />
+            </Stage>
+          )}
+          right={(
+            <WhenWhere rows={[
+              { k: "when",  v: "the output-handle dot is tapped, or an edge insert + is tapped" },
+              { k: "where", v: "screen-space, 14px below and horizontally centered on the tapped point — the handle dot (node's right edge) or the edge midpoint" },
+              { k: "note",  v: "renders outside the canvas world transform, so it never inherits zoom" },
+            ]} />
+          )}
+        />
       </SubBlock>
 
-      <SubBlock label="builder tips · dismissible help panel · top-left of canvas">
-        <Stage padding={16} height={190}>
-          <div style={{ position: "relative", height: 158 }}>
-            <BuilderTips />
-          </div>
-        </Stage>
+      <SubBlock label="builder tips · dismissible help panel">
+        <StageSplit
+          leftFlex={1.5}
+          left={(
+            <Stage label="pinned to the canvas top-left" padding={16} height={190}>
+              <div style={{ position: "relative", width: 280, height: 158 }}>
+                <BuilderTips />
+              </div>
+            </Stage>
+          )}
+          right={(
+            <WhenWhere rows={[
+              { k: "when",   v: "present whenever build mode is active" },
+              { k: "where",  v: "pinned to the top-left of the canvas, above the nodes" },
+              { k: "action", v: "collapses to a ? button; click it to reopen" },
+            ]} />
+          )}
+        />
       </SubBlock>
 
       <SubBlock label="tokens" last>
         <TokensList tokens={[
           { name: "outputHandle.dot",    value: "12px · accent fill · 2px bg1 border · accent glow ring" },
-          { name: "outputHandle.addBtn", value: "22px · bg2 · 1px dashed accent · mono 14px" },
+          { name: "outputHandle.gesture",value: "single dot · tap → add downstream · drag → connect" },
+          { name: "outputHandle.hitArea",value: "≥44px touch target padded around the 12px visual dot" },
           { name: "edgeInsert.btn",      value: "24px · accent fill · 2px bg1 ring · accent-ink color" },
           { name: "edgeDelete.btn",      value: "20px · bg1 · 1px danger border" },
-          { name: "nodeToolbar.bg",      value: "palette.bg1 · border2 · radius 6 · shadow-2" },
-          { name: "nodeToolbar.font",    value: "AppType.sans · 11px · danger color on delete" },
+          { name: "nodeToolbar.btn",     value: "single \u201cactions\u201d button · 28px tall · ⋮ glyph + sans 11px label · bg1 · border2 · radius 6 · shadow-2" },
+          { name: "nodeToolbar.menu",    value: "opens a 196px dropdown · bg1 · border2 · radius 8 · shadow-3 · duplicate / collapse / delete" },
+          { name: "menuItem",            value: "icon + label (sans 12) + mono 9.5px desc · danger row tints on hover" },
           { name: "picker.width",        value: "240px · bg2 · border2 · radius 8 · shadow-3" },
           { name: "picker.row",          value: "22px icon square · mono 11.5px label + 10px desc subtitle" },
           { name: "scaleInvariance",     value: "all overlays: transform scale(1/zoom) so px size stays constant" },

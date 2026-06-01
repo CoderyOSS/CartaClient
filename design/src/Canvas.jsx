@@ -1,4 +1,4 @@
-/* global React, Icon, StatusDot */
+/* global React, Icon, StatusDot, StatusTag, Spinner */
 const { useState: useStateCV, useRef: useRefCV, useEffect: useEffectCV, useMemo: useMemoCV } = React;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -6,24 +6,30 @@ const { useState: useStateCV, useRef: useRefCV, useEffect: useEffectCV, useMemo:
 // ──────────────────────────────────────────────────────────────────────────
 
 const ROUTING_KIND_META = {
+  // `switch` is no longer an addable operator (branch covers routing), but the
+  // meta stays so any legacy workflow that still holds a switch node renders.
   switch: { label: "switch", icon: "gitBranch" },
   branch: { label: "branch", icon: "gitBranch" },
-  map:    { label: "for-each", icon: "refresh" },
+  map:    { label: "for-each", icon: "forEach" },
   loop:   { label: "loop", icon: "refresh" },
-  join:   { label: "join", icon: "workflow" },
+  join:   { label: "join", icon: "merge" },
 };
 
 function NodeShell({ status, selected, glow, density, children, onClick, style }) {
   const compact = density === "compact";
+  const running = status === "running";
   const statusColor = status && status !== "queued" && status !== "skipped"
     ? `var(--co-${status === "passed" ? "success" : status === "failed" ? "danger" : status === "running" ? "accent" : status === "retrying" ? "warning" : "info"})`
     : "var(--co-border-2)";
   const railShadow = (status === "queued" || status === "skipped")
     ? `inset 3px 0 0 color-mix(in oklab, ${statusColor} 40%, transparent)`
     : `inset 3px 0 0 ${statusColor}`;
+  // Running gets an animated, breathing accent halo so it can never be
+  // mistaken for the static crisp ring of a selected node. Selection always
+  // wins when both are true (a deliberate user state).
+  const breathing = running && !selected;
   const outlineShadow = selected
     ? "0 0 0 1px var(--co-accent), 0 0 0 4px color-mix(in oklab, var(--co-accent) 22%, transparent), 0 6px 16px rgba(0,0,0,0.4)"
-    : status === "running" ? `0 0 18px color-mix(in oklab, var(--co-accent) 30%, transparent), 0 4px 12px rgba(0,0,0,0.4)`
     : "var(--co-shadow-1)";
   return (
     <div
@@ -33,9 +39,10 @@ function NodeShell({ status, selected, glow, density, children, onClick, style }
         background: glow
           ? `linear-gradient(180deg, color-mix(in oklab, var(--co-accent) 12%, var(--co-bg-2)) 0%, var(--co-bg-2) 70%)`
           : "var(--co-grad-loaf)",
-        border: `1px solid ${selected ? "var(--co-accent)" : status === "running" ? statusColor : "var(--co-border-2)"}`,
+        border: `1px solid ${selected ? "var(--co-accent)" : running ? statusColor : "var(--co-border-2)"}`,
         borderRadius: 10,
-        boxShadow: `${railShadow}, ${outlineShadow}`,
+        boxShadow: breathing ? undefined : `${railShadow}, ${outlineShadow}`,
+        animation: breathing ? "co-node-running-glow 1.7s var(--co-ease-in-out) infinite" : undefined,
         cursor: "pointer",
         userSelect: "none",
         transition: "border-color 140ms, box-shadow 200ms, transform 100ms",
@@ -68,7 +75,6 @@ function WorkerNode({ stage, status, info, selected, density, onClick }) {
     >
       <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: compact ? 1 : 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {running && <StatusDot status="running" pulse size={6} />}
           <span style={{
             fontFamily: "var(--co-font-mono)",
             fontSize: compact ? 12 : 13,
@@ -127,23 +133,40 @@ function WorkerNode({ stage, status, info, selected, density, onClick }) {
         </div>
       )}
 
-      {/* status badge - top right */}
-      {status && status.status !== "queued" && !running && (
-        <div style={{
-          position: "absolute", top: -7, right: 8,
-          fontFamily: "var(--co-font-mono)", fontSize: 9,
-          padding: "1px 6px", borderRadius: 999,
-          background: status.status === "passed" ? "var(--co-success)" :
-                      status.status === "failed" ? "var(--co-danger)" :
-                      status.status === "skipped" ? "var(--co-bg-4)" :
-                      "var(--co-bg-4)",
-          color: status.status === "skipped" ? "var(--co-text-subtle)" :
-                 status.status === "passed"  ? "color-mix(in oklab, var(--co-success) 30%, #000)" :
-                 status.status === "failed"  ? "color-mix(in oklab, var(--co-danger) 30%, #000)" :
-                 "var(--co-text-strong)",
-          fontWeight: 600,
-        }}>{status.status === "skipped" ? "skipped" : status.status}</div>
-      )}
+      {/* status badge — solid pill straddling the top border, label centered on the border line */}
+      {status && status.status !== "queued" && (() => {
+        const st = status.status;
+        const solid = {
+          passed:    { bg: "var(--co-success)", fg: "color-mix(in oklab, var(--co-success) 32%, #000)" },
+          failed:    { bg: "var(--co-danger)",  fg: "color-mix(in oklab, var(--co-danger) 34%, #000)" },
+          running:   { bg: "var(--co-accent)",  fg: "color-mix(in oklab, var(--co-accent) 38%, #000)" },
+          retrying:  { bg: "var(--co-warning)", fg: "color-mix(in oklab, var(--co-warning) 36%, #000)" },
+          skipped:   { bg: "var(--co-bg-4)",    fg: "var(--co-text-subtle)" },
+          cancelled: { bg: "var(--co-bg-4)",    fg: "var(--co-text-subtle)" },
+        }[st] || { bg: "var(--co-bg-4)", fg: "var(--co-text-strong)" };
+        return (
+          <div style={{
+            position: "absolute", top: -8, right: 8,
+            display: "inline-flex", alignItems: "center", gap: 4,
+            height: 16, padding: "0 7px", borderRadius: 999,
+            fontFamily: "var(--co-font-mono)", fontSize: 9, fontWeight: 600,
+            letterSpacing: "0.02em", lineHeight: 1, whiteSpace: "nowrap",
+            background: solid.bg, color: solid.fg,
+          }}>
+            {st === "running" && (
+              <span style={{
+                width: 10, height: 10, borderRadius: "50%",
+                background: `radial-gradient(farthest-side, ${solid.fg} 94%, transparent) top/2px 2px no-repeat, conic-gradient(transparent 30%, ${solid.fg})`,
+                WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0)",
+                mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0)",
+                animation: "co-spin 0.8s infinite linear",
+                flexShrink: 0,
+              }} />
+            )}
+            {st}
+          </div>
+        );
+      })()}
     </NodeShell>
   );
 }

@@ -1,6 +1,32 @@
 /* global React */
 const { useState, useMemo, useEffect } = React;
 
+/* Canvas keyframes — injected once so every host page (app + handoff) shares
+   the same source. Used by the worker-node running state + spinner. */
+(function injectCanvasKeyframes() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("co-canvas-keyframes")) return;
+  const s = document.createElement("style");
+  s.id = "co-canvas-keyframes";
+  s.textContent = `
+    @keyframes co-spin { to { transform: rotate(360deg); } }
+    @keyframes co-pulse-glow {
+      0%, 100% {
+        filter: brightness(0.74);
+        box-shadow: 0 0 2px 0 color-mix(in oklab, var(--co-pulse-c, var(--co-accent)) 14%, transparent);
+      }
+      50% {
+        filter: brightness(1.3);
+        box-shadow: 0 0 9px 2px color-mix(in oklab, var(--co-pulse-c, var(--co-accent)) 68%, transparent);
+      }
+    }
+    @keyframes co-node-running-glow {
+      0%, 100% { box-shadow: inset 3px 0 0 var(--co-accent), 0 0 0 1px color-mix(in oklab, var(--co-accent) 48%, transparent), 0 0 9px color-mix(in oklab, var(--co-accent) 18%, transparent), 0 4px 12px rgba(0,0,0,0.4); }
+      50%      { box-shadow: inset 3px 0 0 var(--co-accent), 0 0 0 1px color-mix(in oklab, var(--co-accent) 82%, transparent), 0 0 24px color-mix(in oklab, var(--co-accent) 50%, transparent), 0 4px 12px rgba(0,0,0,0.4); }
+    }`;
+  (document.head || document.documentElement).appendChild(s);
+})();
+
 /* ─────────────────────────────────────────────
    Icon — inline Lucide-style strokes
    ───────────────────────────────────────────── */
@@ -40,6 +66,14 @@ const ICONS = {
   list:    'line:8,6,21,6|line:8,12,21,12|line:8,18,21,18|line:3,6,3.01,6|line:3,12,3.01,12|line:3,18,3.01,18',
   // Active mode — stopwatch
   stopwatch: 'circle:12,14,8|line:12,10,12,14|line:9,2,15,2|line:12,2,12,4|line:18.4,5.6,19.8,7',
+  // for-each — fan-out: one source iterates out to many parallel items
+  forEach: 'circle:4,12,2|circle:20,5,2|circle:20,12,2|circle:20,19,2|path:M6 12h6M12 5v14M12 5h6M12 12h6M12 19h6',
+  // join — fan-in: many upstreams merge into one
+  merge:   'circle:4,5,2|circle:4,12,2|circle:4,19,2|circle:20,12,2|path:M6 5h6M6 12h6M6 19h6M12 5v14M12 12h6',
+  // node toolbar — kebab "more" menu trigger
+  moreVertical: 'circle:12,5,1.3|circle:12,12,1.3|circle:12,19,1.3',
+  // remove + collapse — parent wired straight through to child
+  collapseLink: 'circle:3.2,12,2.2|circle:20.8,12,2.2|line:5.4,12,18.6,12',
 };
 
 function Icon({ name, size = 16, color = "currentColor", strokeWidth = 1.5, style }) {
@@ -146,6 +180,7 @@ const STATUS = {
   failed:    { color: "var(--co-danger)",  soft: "var(--co-danger-soft)",  label: "failed"    },
   queued:    { color: "var(--co-info)",    soft: "var(--co-info-soft)",    label: "queued"    },
   cancelled: { color: "var(--co-fg-3)",    soft: "var(--co-bg-3)",         label: "cancelled" },
+  skipped:   { color: "var(--co-text-subtle)", soft: "var(--co-bg-3)",     label: "skipped"   },
 };
 
 function StatusDot({ status, pulse = false, size = 6 }) {
@@ -155,8 +190,24 @@ function StatusDot({ status, pulse = false, size = 6 }) {
       display: "inline-block",
       width: size, height: size, borderRadius: 999,
       background: s.color,
-      animation: pulse ? "co-pulse 2s linear infinite" : "none",
+      "--co-pulse-c": s.color,
+      animation: pulse ? "co-pulse-glow 1.1s var(--co-ease-in-out) infinite" : "none",
       verticalAlign: 1,
+    }} />
+  );
+}
+
+function Spinner({ size = 12, stroke = 1.6, color = "var(--co-accent)" }) {
+  return (
+    <span style={{
+      display: "inline-block",
+      width: size, height: size,
+      borderRadius: 999,
+      border: `${stroke}px solid color-mix(in oklab, ${color} 24%, transparent)`,
+      borderTopColor: color,
+      animation: "co-spin 0.7s linear infinite",
+      boxSizing: "border-box",
+      flexShrink: 0,
     }} />
   );
 }
@@ -222,4 +273,4 @@ function Eyebrow({ children, accent = false, style }) {
 }
 
 /* expose */
-Object.assign(window, { Icon, Button, IconButton, StatusDot, StatusTag, Tag, Card, Eyebrow });
+Object.assign(window, { Icon, Button, IconButton, StatusDot, StatusTag, Spinner, Tag, Card, Eyebrow });
