@@ -5,7 +5,7 @@ import '../widgets/mode_rail.dart';
 import 'canvas_controller.dart';
 import 'mock_data.dart';
 
-final modeProvider = StateProvider<AppMode>((ref) => AppMode.active);
+final modeProvider = StateProvider<AppMode>((ref) => AppMode.build);
 
 final selectedJobProvider = StateProvider<JobSummary?>((ref) => null);
 
@@ -30,6 +30,8 @@ final draggingNodeIdProvider = StateProvider<String?>((ref) => null);
 final dragOffsetProvider = StateProvider<Offset>((ref) => Offset.zero);
 
 final runsTableViewModeProvider = StateProvider<String>((ref) => 'flat');
+
+final yamlDrawerOpenProvider = StateProvider<bool>((ref) => false);
 
 final documentsProvider = StateProvider<Map<String, WorkflowDocument>>((ref) {
   return {

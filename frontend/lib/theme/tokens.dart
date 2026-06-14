@@ -29,6 +29,14 @@ class AppColors {
   static const Color danger = Color(0xFFe26464);
   static const Color info = Color(0xFF6ea8d9);
 
+  static const Color synKeyword = Color(0xFFf4a955);
+  static const Color synString = Color(0xFFb5d189);
+  static const Color synNumber = Color(0xFFf0b340);
+  static const Color synComment = Color(0xFF7a5d44);
+  static const Color synFunction = Color(0xFF7aa6cc);
+  static const Color synType = Color(0xFFe0a8d4);
+  static const Color synPunct = Color(0xFF99765a);
+
   static const Gradient hearthGradient = RadialGradient(
     center: Alignment(0, -1.1),
     radius: 1.1,

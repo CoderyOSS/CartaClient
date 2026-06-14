@@ -306,13 +306,13 @@ class GraphCanvas extends ConsumerWidget {
                                             : node.kind == 'fan'
                                                 ? 160.0
                                                 : RoutingNode.pillRight) -
-                                        88.0 / viewport.zoom,
+                                        44.0 / viewport.zoom,
                                     top: (node.kind == 'worker'
                                             ? 16.0
                                             : node.kind == 'fan'
                                                 ? 32.0
                                                 : RoutingNode.pillVCenter) -
-                                        88.0 / viewport.zoom,
+                                        44.0 / viewport.zoom,
                                     child: _OutputHandle(
                                       inverseZoom: 1.0 / viewport.zoom,
                                       onTap: () => showPicker(
@@ -390,7 +390,7 @@ class _OutputHandle extends StatelessWidget {
   Widget build(BuildContext context) {
     // Direct world-space sizing so hit area exactly matches visual area.
     // 44 screen-px hit area = 44 * inverseZoom world units.
-    final size = 176.0 * inverseZoom;
+    final size = 88.0 * inverseZoom;
     final dotSize = 12.0 * inverseZoom;
     final borderWidth = 2.0 * inverseZoom;
     final ringSpread = 1.0 * inverseZoom;

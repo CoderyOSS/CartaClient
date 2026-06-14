@@ -1,0 +1,537 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../theme/tokens.dart';
+import '../providers/mode_provider.dart';
+import '../providers/mock_data.dart';
+import '../utils/workflow_to_yaml.dart';
+import 'app_button.dart';
+import 'icons.dart';
+
+class YamlDrawer extends ConsumerStatefulWidget {
+  final WorkflowSummary workflow;
+  final JobSummary? job;
+  final VoidCallback onClose;
+
+  const YamlDrawer({
+    super.key,
+    required this.workflow,
+    this.job,
+    required this.onClose,
+  });
+
+  @override
+  ConsumerState<YamlDrawer> createState() => _YamlDrawerState();
+}
+
+class _YamlDrawerState extends ConsumerState<YamlDrawer> {
+  bool _copied = false;
+  bool _showFind = false;
+  final _searchController = TextEditingController();
+
+  String get _fileName {
+    if (widget.job != null) return '${widget.job!.id}.resolved.yaml';
+    return '${widget.workflow.name}.yaml';
+  }
+
+  String get _yamlText {
+    final spec = workflowToYaml(widget.workflow);
+    if (widget.job != null) {
+      return _jobPreface(widget.job!) + '\n' + spec;
+    }
+    return spec;
+  }
+
+  String _jobPreface(JobSummary job) {
+    final status = job.state.name;
+    return [
+      '# --- resolved run spec ---',
+      '# run:       ${job.id}',
+      '# workflow:  ${job.workflow ?? "unknown"} \u00b7 v${job.workflowVersion ?? 0}',
+      '# input:     ${job.input ?? "\u2014"}',
+      '# status:    $status',
+      '# this is the exact, pinned spec the run executed \u2014 read-only.',
+      '# ---',
+    ].join('\n');
+  }
+
+  void _copyAll() {
+    Clipboard.setData(ClipboardData(text: _yamlText));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final yamlText = _yamlText;
+    final lines = yamlText.split('\n');
+    final lineCount = lines.length;
+    final byteSize = yamlText.length;
+    final sizeLabel = byteSize < 1024 ? '$byteSize B' : '${(byteSize / 1024).toStringAsFixed(1)} kB';
+    final isJob = widget.job != null;
+    final search = _searchController.text.trim().toLowerCase();
+
+    return Container(
+      width: 460,
+      decoration: const BoxDecoration(
+        color: AppColors.bg1,
+        border: Border(
+          left: BorderSide(color: AppColors.border1, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // header
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.border1, width: 1),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: AppColors.bg3,
+                        border: Border.all(color: AppColors.border3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      alignment: Alignment.center,
+                      child: const TrailheadIcon(
+                        icon: TrailheadIconData.file,
+                        size: 14,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _fileName,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.fg0,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ReadOnlyPill(),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$lineCount lines \u00b7 $sizeLabel \u00b7 ${isJob ? "pinned to run" : "compiled from v${widget.workflow.draft ?? widget.workflow.version} draft"}',
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 10.5,
+                              color: AppColors.fg2,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: widget.onClose,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: AppColors.bg2,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          alignment: Alignment.center,
+                          child: const TrailheadIcon(
+                            icon: TrailheadIconData.x,
+                            size: 14,
+                            color: AppColors.fg2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // toolbar
+                Row(
+                  children: [
+                    AppButton(
+                      variant: AppButtonVariant.secondary,
+                      size: AppButtonSize.sm,
+                      icon: _copied ? TrailheadIconData.check : TrailheadIconData.copy,
+                      label: _copied ? 'copied' : 'copy',
+                      onTap: _copyAll,
+                    ),
+                    const SizedBox(width: 6),
+                    AppButton(
+                      variant: AppButtonVariant.ghost,
+                      size: AppButtonSize.sm,
+                      icon: TrailheadIconData.save,
+                      label: 'download',
+                      onTap: () {},
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setState(() => _showFind = !_showFind),
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: _showFind ? AppColors.bg4 : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          alignment: Alignment.center,
+                          child: TrailheadIcon(
+                            icon: TrailheadIconData.search,
+                            size: 14,
+                            color: _showFind ? AppColors.fg0 : AppColors.fg2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_showFind) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    autofocus: true,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: AppColors.fg0,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.bg0,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.border2),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.border2),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.accent),
+                      ),
+                      hintText: 'find in spec\u2026',
+                      hintStyle: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: AppColors.fg3,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // body
+          Expanded(
+            child: Container(
+              color: AppColors.bg2,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: IntrinsicWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < lines.length; i++)
+                        _buildLine(i + 1, lines[i], search),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // footer
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.border1, width: 1),
+              ),
+              color: AppColors.bg2,
+            ),
+            child: Row(
+              children: [
+                const TrailheadIcon(
+                  icon: TrailheadIconData.lock,
+                  size: 11,
+                  color: AppColors.fg2,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isJob
+                        ? 'the canvas compiled this \u2014 rerun to change it'
+                        : 'the canvas compiles this \u2014 edit stages to change it',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10.5,
+                      color: AppColors.fg2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLine(int lineNum, String raw, String query) {
+    final hit = query.isNotEmpty && raw.toLowerCase().contains(query);
+    final hitBg = hit ? AppColors.accent.withValues(alpha: 0.14) : Colors.transparent;
+
+    return Container(
+      color: hitBg,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            padding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
+            alignment: Alignment.topRight,
+            child: Text(
+              '$lineNum',
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: AppColors.fg3,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 20),
+            child: _YamlLine(raw: raw),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReadOnlyPill extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.bg3,
+        border: Border.all(color: AppColors.border1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const TrailheadIcon(
+            icon: TrailheadIconData.lock,
+            size: 9,
+            color: AppColors.fg2,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'read-only',
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.08 * 9,
+              color: AppColors.fg2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YamlLine extends StatelessWidget {
+  final String raw;
+
+  const _YamlLine({required this.raw});
+
+  @override
+  Widget build(BuildContext context) {
+    final indentMatch = RegExp(r'^(\s*)(.*)$').firstMatch(raw);
+    final indent = indentMatch?.group(1) ?? '';
+    var rest = indentMatch?.group(2) ?? '';
+
+    // Full-line comment.
+    if (rest.startsWith('#')) {
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: indent),
+            TextSpan(
+              text: rest,
+              style: const TextStyle(
+                color: AppColors.synComment,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 12.5,
+            height: 1.65,
+            color: AppColors.fg0,
+          ),
+        ),
+      );
+    }
+
+    // Split off trailing inline comment.
+    String? trailing;
+    final hashIdx = rest.indexOf(RegExp(r'\s#'));
+    if (hashIdx != -1) {
+      final beforeHash = rest.substring(0, hashIdx);
+      final quoteCount = beforeHash.split('"').length - 1;
+      if (quoteCount % 2 == 0) {
+        trailing = rest.substring(hashIdx);
+        rest = beforeHash;
+      }
+    }
+
+    // Leading list marker.
+    String listMarker = '';
+    final lm = RegExp(r'^(-\s+)(.*)$').firstMatch(rest);
+    if (lm != null) {
+      listMarker = lm.group(1)!;
+      rest = lm.group(2)!;
+    }
+
+    final spans = <TextSpan>[];
+
+    // key: value
+    final kv = RegExp(r'^([A-Za-z0-9_.\-]+)(:)(\s*)(.*)$').firstMatch(rest);
+    if (kv != null) {
+      spans.add(TextSpan(text: kv.group(1), style: const TextStyle(color: AppColors.synFunction)));
+      spans.add(TextSpan(text: kv.group(2), style: const TextStyle(color: AppColors.synPunct)));
+      spans.add(TextSpan(text: kv.group(3), style: const TextStyle(color: AppColors.fg0)));
+      _pushValue(kv.group(4)!, spans);
+    } else if (rest.isNotEmpty) {
+      _pushValue(rest, spans);
+    }
+
+    final children = <InlineSpan>[
+      TextSpan(text: indent),
+    ];
+    if (listMarker.isNotEmpty) {
+      children.add(TextSpan(text: listMarker, style: const TextStyle(color: AppColors.synPunct)));
+    }
+    children.addAll(spans);
+    if (trailing != null) {
+      children.add(TextSpan(
+        text: trailing,
+        style: const TextStyle(color: AppColors.synComment, fontStyle: FontStyle.italic),
+      ));
+    }
+
+    return Text.rich(
+      TextSpan(
+        children: children,
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12.5,
+          height: 1.65,
+          color: AppColors.fg0,
+        ),
+      ),
+    );
+  }
+
+  void _pushValue(String val, List<TextSpan> out) {
+    if (val.isEmpty) return;
+
+    // Block scalar indicators.
+    if (val == '|' || val == '>' || val == '|-' || val == '>-') {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synKeyword)));
+      return;
+    }
+
+    // Quoted string.
+    if (RegExp(r'^".*"$').hasMatch(val)) {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synString)));
+      return;
+    }
+
+    // Inline array [a, b, c].
+    if (RegExp(r'^\[.*\]$').hasMatch(val)) {
+      final inner = val.substring(1, val.length - 1);
+      out.add(const TextSpan(text: '[', style: TextStyle(color: AppColors.synPunct)));
+      final parts = inner.split(RegExp(r'(,\s*)'));
+      for (final tok in parts) {
+        if (RegExp(r'^,\s*$').hasMatch(tok)) {
+          out.add(TextSpan(text: tok, style: const TextStyle(color: AppColors.synPunct)));
+        } else {
+          out.add(TextSpan(text: tok, style: const TextStyle(color: AppColors.fg0)));
+        }
+      }
+      out.add(const TextSpan(text: ']', style: TextStyle(color: AppColors.synPunct)));
+      return;
+    }
+
+    // Number.
+    if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(val)) {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synNumber)));
+      return;
+    }
+
+    // Keyword literals + scalar types.
+    const keywords = {'true', 'false', 'null'};
+    const types = {'int', 'string', 'boolean', 'object', 'array', 'integer', 'number'};
+    if (keywords.contains(val)) {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synKeyword)));
+      return;
+    }
+    if (types.contains(val)) {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synType)));
+      return;
+    }
+
+    // enum[...] shorthand.
+    if (val.startsWith('enum[')) {
+      out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.synType)));
+      return;
+    }
+
+    // Bare scalar.
+    out.add(TextSpan(text: val, style: const TextStyle(color: AppColors.fg0)));
+  }
+}

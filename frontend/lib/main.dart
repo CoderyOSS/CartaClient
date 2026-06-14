@@ -10,6 +10,7 @@ import 'widgets/workflows_sidebar.dart';
 import 'widgets/jobs_sidebar.dart';
 import 'widgets/canvas/graph_canvas.dart';
 import 'widgets/runs_table.dart';
+import 'widgets/yaml_drawer.dart';
 
 void main() {
   runApp(const TrailheadApp());
@@ -41,6 +42,8 @@ class TrailheadShell extends ConsumerWidget {
     final mode = ref.watch(modeProvider);
     final job = ref.watch(selectedJobProvider);
     final showSidebar = mode != AppMode.history || job != null;
+    final yamlOpen = mode == AppMode.build && ref.watch(yamlDrawerOpenProvider);
+    final workflow = ref.watch(workflowProvider);
 
     return Scaffold(
       body: Column(
@@ -62,6 +65,12 @@ class TrailheadShell extends ConsumerWidget {
                     ],
                   ),
                 ),
+                if (yamlOpen)
+                  YamlDrawer(
+                    workflow: workflow,
+                    onClose: () =>
+                        ref.read(yamlDrawerOpenProvider.notifier).state = false,
+                  ),
               ],
             ),
           ),

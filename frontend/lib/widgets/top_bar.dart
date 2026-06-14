@@ -229,7 +229,9 @@ class _BuildBar extends ConsumerWidget {
           size: AppButtonSize.sm,
           icon: TrailheadIconData.file,
           label: 'YAML',
-          onTap: () {},
+          onTap: () {
+            ref.read(yamlDrawerOpenProvider.notifier).state = true;
+          },
         ),
         const SizedBox(width: 8),
         Container(
