@@ -263,14 +263,17 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
             child: Container(
               color: AppColors.bg2,
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: IntrinsicWidth(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < lines.length; i++)
-                        _buildLine(i + 1, lines[i], search),
-                    ],
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: IntrinsicWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var i = 0; i < lines.length; i++)
+                          _buildLine(i + 1, lines[i], search),
+                      ],
+                    ),
                   ),
                 ),
               ),
