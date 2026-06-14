@@ -68,8 +68,8 @@ class WorkerNode extends StatelessWidget {
       onEnter: (_) => onEnter?.call(),
       onExit: (_) => onExit?.call(),
       child: Container(
-        width: 192,
-        height: 80,
+        width: 160,
+        height: 32,
         decoration: BoxDecoration(
           gradient: running
               ? LinearGradient(
@@ -100,7 +100,7 @@ class WorkerNode extends StatelessWidget {
               child: SizedBox.expand(
                 child: Stack(
                   children: [
-                    // Status rail — drawn as left border, clipped by rounded corners
+                    // Status rail
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -110,100 +110,39 @@ class WorkerNode extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    // Content — centered label only
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
+                        child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Row(
-                            children: [
-                              if (running)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: StatusDot(
-                                    status: JobState.running,
-                                    pulse: true,
-                                    size: 6,
-                                  ),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  node.label,
-                                  style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.fg0,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                          if (running)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 5),
+                              child: StatusDot(
+                                status: JobState.running,
+                                pulse: true,
+                                size: 5,
                               ),
-                              if (node.model != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.bg4,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    node.model!,
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 9,
-                                      color: AppColors.fg2,
-                                      letterSpacing: 0.02 * 9,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (node.sub != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              node.sub!,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: AppColors.fg2,
+                            ),
+                          Expanded(
+                            child: Text(
+                              node.label,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.fg0,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                             ),
-                          ],
-                          const Spacer(),
-                          if (node.skills.isNotEmpty)
-                            Row(
-                              children: [
-                                ...node.skills.take(3).map((sk) => Container(
-                                  margin: const EdgeInsets.only(right: 5),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.bg3,
-                                    border: Border.all(color: AppColors.border1),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    sk,
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 9,
-                                      color: AppColors.fg2,
-                                    ),
-                                  ),
-                                )),
-                                if (node.skills.length > 3)
-                                  Text(
-                                    '+${node.skills.length - 3}',
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 9,
-                                      color: AppColors.fg2,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                          ),
                         ],
                       ),
                     ),
+                  ),
                     // Progress bar
                     if (running)
                       Positioned(
@@ -221,9 +160,7 @@ class WorkerNode extends StatelessWidget {
                             widthFactor: 0.55,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Color(0xFFe8923a), Color(0xFFf0a85c)],
-                                ),
+                                gradient: AppColors.crustGradient,
                                 borderRadius: BorderRadius.horizontal(
                                   left: Radius.circular(1),
                                 ),
@@ -236,10 +173,10 @@ class WorkerNode extends StatelessWidget {
                 ),
               ),
             ),
-            // Status badge — outside clip so it can overflow the top edge
+            // Status badge
             if (status != null && !running && status != JobState.queued)
               Positioned(
-                top: -7,
+                top: -8,
                 right: 8,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -266,11 +203,11 @@ class WorkerNode extends StatelessWidget {
                   ),
                 ),
               ),
-            // Delete button — shown when selected
+            // Delete button
             if (selected && onDelete != null)
               Positioned(
                 top: -8,
-                right: -8,
+                left: -8,
                 child: GestureDetector(
                   onTap: onDelete,
                   child: Container(

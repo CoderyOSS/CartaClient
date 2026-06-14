@@ -21,6 +21,8 @@ class AppColors {
 
   static const Color accent = Color(0xFFe8923a);
   static const Color accentInk = Color(0xFF2d1810);
+  static const Color trail = Color(0xFF7a8d4a);
+  static const Color chartGrid = Color(0xFF2e1e12);
 
   static const Color success = Color(0xFF6fbf73);
   static const Color warning = Color(0xFFe6b341);
@@ -45,6 +47,12 @@ class AppColors {
       Color(0xFF1a1d23),
       Color(0xFF1f232a),
     ],
+  );
+
+  static const Gradient crustGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFe8923a), Color(0xFFf0a85c)],
   );
 }
 
