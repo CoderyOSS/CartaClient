@@ -1,5 +1,6 @@
 import 'dart:math' show Random;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/workflow_document.dart';
@@ -175,7 +176,7 @@ class GraphCanvas extends ConsumerWidget {
                   child: Transform.scale(
                     scale: viewport.zoom,
                     alignment: Alignment.topLeft,
-                    child: Stack(
+                    child: UnboundedHitStack(
                       clipBehavior: Clip.none,
                       children: [
                         // Connection edges (behind nodes)
@@ -340,10 +341,10 @@ class GraphCanvas extends ConsumerWidget {
                           );
                         }),
 
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 // Screen-space operator picker
                 if (pickerAnchor != null)
                   OperatorPicker(
@@ -414,5 +415,63 @@ class _OutputHandle extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A [Stack] whose hit-test is not bounded by its own size.
+///
+/// Flutter's default [RenderStack.hitTest] rejects pointers that fall
+/// outside the Stack's layout bounds. That breaks nodes positioned at
+/// negative world coordinates (left of the Y axis or above the X axis),
+/// because the transformed pointer lands outside the Stack's local bounds.
+///
+/// This widget overrides [hitTest] to test children regardless of the
+/// Stack's own size, while keeping normal layout and paint clipping
+/// (the outer [ClipRect] still clips painting to the viewport).
+class UnboundedHitStack extends Stack {
+  const UnboundedHitStack({
+    super.key,
+    super.alignment,
+    super.textDirection,
+    super.fit,
+    super.clipBehavior,
+    super.children,
+  });
+
+  @override
+  RenderStack createRenderObject(BuildContext context) {
+    return _RenderUnboundedHitStack(
+      alignment: alignment,
+      textDirection: textDirection ?? Directionality.maybeOf(context),
+      fit: fit,
+      clipBehavior: clipBehavior,
+    );
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderStack renderObject) {
+    renderObject
+      ..alignment = alignment
+      ..textDirection = textDirection ?? Directionality.maybeOf(context)
+      ..fit = fit
+      ..clipBehavior = clipBehavior;
+  }
+}
+
+class _RenderUnboundedHitStack extends RenderStack {
+  _RenderUnboundedHitStack({
+    super.alignment,
+    super.textDirection,
+    super.fit,
+    super.clipBehavior,
+  });
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (hitTestChildren(result, position: position) || hitTestSelf(position)) {
+      result.add(BoxHitTestEntry(this, position));
+      return true;
+    }
+    return false;
   }
 }
