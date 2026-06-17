@@ -103,7 +103,7 @@ final mockWorkflow = WorkflowSummary(
       kind: 'fan',
       label: 'comment-files',
       x: 220,
-      y: -32,
+      y: -16,
     ),
   ],
   edges: const [
