@@ -4,23 +4,13 @@ import '../../providers/mock_data.dart';
 import '../../theme/tokens.dart';
 import '../icons.dart';
 
-
-class RoutingNode extends StatelessWidget {
-  /// Full footprint matching the WorkerNode and the canvas grid.
-  static const double width = 192;
-  static const double height = 64;
-
-  /// Pill bounds inside the 192×64 footprint.
-  static const double pillLeft = 34;
-  static const double pillRight = 158;  // 34 + 124
-  static const double pillVCenter = 32; // centered in 64
-
+class BranchNode extends StatelessWidget {
   final WorkflowNode node;
   final JobState? status;
   final bool selected;
   final VoidCallback? onEnter;
   final VoidCallback? onExit;
-  const RoutingNode({
+  const BranchNode({
     super.key,
     required this.node,
     this.status,
@@ -29,14 +19,26 @@ class RoutingNode extends StatelessWidget {
     this.onExit,
   });
 
+  static const double width = 130;
+  static const double _rowH = 27;
+  static const double _padY = 9;
+
+  static const List<_Case> _cases = [
+    _Case(label: 'high', muted: false),
+    _Case(label: 'medium', muted: false),
+    _Case(label: 'low', muted: false),
+    _Case(label: 'default', muted: true),
+  ];
+
+  double get height => _padY * 2 + _cases.length * _rowH;
+
   @override
   Widget build(BuildContext context) {
     final running = status == JobState.running;
-    final meta = _routingMeta[node.kind] ?? _routingMeta['branch']!;
 
-    List<BoxShadow> shadows;
+    List<BoxShadow> outlineShadows;
     if (selected) {
-      shadows = [
+      outlineShadows = [
         BoxShadow(
           color: AppColors.accent.withValues(alpha: 0.22),
           blurRadius: 0,
@@ -49,7 +51,7 @@ class RoutingNode extends StatelessWidget {
         ),
       ];
     } else if (running) {
-      shadows = [
+      outlineShadows = [
         BoxShadow(
           color: AppColors.accent.withValues(alpha: 0.30),
           blurRadius: 14,
@@ -61,7 +63,7 @@ class RoutingNode extends StatelessWidget {
         ),
       ];
     } else {
-      shadows = [
+      outlineShadows = [
         const BoxShadow(
           color: Color(0x1A000000),
           blurRadius: 8,
@@ -70,72 +72,130 @@ class RoutingNode extends StatelessWidget {
       ];
     }
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: MouseRegion(
-        onEnter: (_) => onEnter?.call(),
-        onExit: (_) => onExit?.call(),
+    final h = height;
+
+    return MouseRegion(
+      onEnter: (_) => onEnter?.call(),
+      onExit: (_) => onExit?.call(),
+      child: Container(
+        width: width,
+        height: h,
+        decoration: BoxDecoration(
+          gradient: running
+              ? LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.accent.withValues(alpha: 0.12),
+                    AppColors.bg2,
+                  ],
+                  stops: const [0.0, 0.7],
+                )
+              : AppColors.loafGradient,
+          border: Border.all(
+            color: selected
+                ? AppColors.accent
+                : running
+                    ? AppColors.accent
+                    : AppColors.border2,
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          boxShadow: outlineShadows,
+        ),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Positioned(
-              left: 34,
-              top: 7,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 124,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: running
-                          ? LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppColors.accent.withValues(alpha: 0.14),
-                                AppColors.bg3,
-                              ],
-                            )
-                          : null,
-                      color: running ? null : AppColors.bg3,
-                      border: Border.all(
-                        color: selected || running
-                            ? AppColors.accent
-                            : AppColors.border3,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: SizedBox.expand(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      decoration: const BoxDecoration(
+                        gradient: AppColors.crustGradient,
+                        border: Border(
+                          right: BorderSide(color: AppColors.border2),
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(999),
-                      boxShadow: shadows,
-                    ),
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TrailheadIcon(
-                            icon: meta.icon,
-                            size: 12,
-                            color: running ? AppColors.accent : AppColors.fg0,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            meta.label,
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: running ? AppColors.accent : AppColors.fg0,
-                            ),
-                          ),
-                        ],
+                      child: const Center(
+                        child: TrailheadIcon(
+                          icon: TrailheadIconData.gitBranch,
+                          size: 14,
+                          color: AppColors.accentInk,
+                        ),
                       ),
                     ),
-                  ),
-
-                ],
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: _padY),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _cases.map((c) {
+                            return SizedBox(
+                              height: _rowH,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 12, left: 11),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    c.label,
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 12,
+                                      fontWeight: c.muted ? FontWeight.w500 : FontWeight.w600,
+                                      color: c.muted ? AppColors.fg3 : AppColors.fg0,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-
+            // Input dot
+            Positioned(
+              left: -4,
+              top: h / 2 - 4,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: AppColors.bg3,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border3, width: 1.5),
+                ),
+              ),
+            ),
+            // Output dots
+            ..._cases.asMap().entries.map((e) {
+              final i = e.key;
+              final top = _padY + i * _rowH + _rowH / 2 - 4;
+              return Positioned(
+                right: -4,
+                top: top,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.bg3,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border3, width: 1.5),
+                  ),
+                ),
+              );
+            }),
+            if (status != null && !running && status != JobState.queued)
+              Positioned(
+                top: -8,
+                right: 8,
+                child: _StatusBadge(status: status!),
+              ),
           ],
         ),
       ),
@@ -143,12 +203,41 @@ class RoutingNode extends StatelessWidget {
   }
 }
 
-final _routingMeta = <String, _RoutingMeta>{
-  'branch': _RoutingMeta(label: 'branch', icon: TrailheadIconData.gitBranch),
-};
-
-class _RoutingMeta {
+class _Case {
   final String label;
-  final TrailheadIconData icon;
-  const _RoutingMeta({required this.label, required this.icon});
+  final bool muted;
+  const _Case({required this.label, required this.muted});
+}
+
+class _StatusBadge extends StatelessWidget {
+  final JobState status;
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: status == JobState.passed
+            ? AppColors.success
+            : status == JobState.failed
+                ? AppColors.danger
+                : AppColors.bg4,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        status == JobState.cancelled ? 'cancelled' : status.name,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: status == JobState.passed
+              ? const Color(0xFF1a3d1c)
+              : status == JobState.failed
+                  ? const Color(0xFF3d1a1a)
+                  : AppColors.fg2,
+        ),
+      ),
+    );
+  }
 }

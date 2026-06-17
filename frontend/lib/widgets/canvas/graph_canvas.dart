@@ -223,7 +223,7 @@ class GraphCanvas extends ConsumerWidget {
                                             (hoveredNodeId == node.id) ? null : hoveredNodeId;
                                       },
                                     )
-                                   : RoutingNode(
+                                   : BranchNode(
                                       node: node,
                                       selected: isSelected,
                                       onEnter: () {
@@ -275,7 +275,11 @@ class GraphCanvas extends ConsumerWidget {
                                       ? (_) {
                                           if (draggingNodeId == node.id) {
                                             final offset = ref.read(dragOffsetProvider);
-                                            final nodeHeight = node.kind == 'worker' ? 32.0 : 64.0;
+                                            final nodeHeight = node.kind == 'worker'
+                                                ? 32.0
+                                                : node.kind == 'fan'
+                                                    ? 64.0
+                                                    : 126.0;
                                             final snappedX = _snap(node.x + offset.dx);
                                             final snappedY = _snapCenter(node.y + offset.dy + nodeHeight / 2) - nodeHeight / 2;
                                             final newNodes = workflow.nodes.map((n) {
@@ -305,13 +309,13 @@ class GraphCanvas extends ConsumerWidget {
                                             ? 160.0
                                             : node.kind == 'fan'
                                                 ? 160.0
-                                                : RoutingNode.pillRight) -
+                                                : BranchNode.width) -
                                         44.0 / viewport.zoom,
                                     top: (node.kind == 'worker'
                                             ? 16.0
                                             : node.kind == 'fan'
                                                 ? 32.0
-                                                : RoutingNode.pillVCenter) -
+                                                : 63.0) -
                                         44.0 / viewport.zoom,
                                     child: _OutputHandle(
                                       inverseZoom: 1.0 / viewport.zoom,
@@ -322,13 +326,13 @@ class GraphCanvas extends ConsumerWidget {
                                                   ? 160.0
                                                   : node.kind == 'fan'
                                                       ? 160.0
-                                                      : RoutingNode.pillRight),
+                                                      : BranchNode.width),
                                           displayY +
                                               (node.kind == 'worker'
                                                   ? 16.0
                                                   : node.kind == 'fan'
                                                       ? 32.0
-                                                      : RoutingNode.pillVCenter),
+                                                      : 63.0),
                                         ),
                                         node.id,
                                       ),

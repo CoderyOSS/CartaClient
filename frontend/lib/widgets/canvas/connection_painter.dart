@@ -17,10 +17,9 @@ class ConnectionPainter extends CustomPainter {
   static const double _controlMin = 40.0;
   static const double _controlMax = 150.0;
 
-  // Routing-node pill geometry (same as RoutingNode constants)
-  static const double _pillLeft = 34.0;
-  static const double _pillRight = 158.0;   // 34 + 124
-  static const double _pillVCenter = 32.0;  // centered in 64
+  // BranchNode geometry
+  static const double _branchWidth = 130.0;
+  static const double _branchHeight = 126.0; // 9*2 + 4*27
 
   ConnectionPainter({
     required this.nodes,
@@ -39,18 +38,18 @@ class ConnectionPainter extends CustomPainter {
   Offset _exitPoint(WorkflowNode node) {
     final pos = _nodePos(node);
     return switch (node.kind) {
-      'worker' => Offset(pos.dx + _workerWidth, pos.dy + _workerHeight / 2),
-      'fan'    => Offset(pos.dx + _fanWidth,    pos.dy + _fanHeight / 2),
-      _        => Offset(pos.dx + _pillRight,   pos.dy + _pillVCenter),
+      'worker' => Offset(pos.dx + _workerWidth,  pos.dy + _workerHeight / 2),
+      'fan'    => Offset(pos.dx + _fanWidth,     pos.dy + _fanHeight / 2),
+      _        => Offset(pos.dx + _branchWidth,  pos.dy + _branchHeight / 2),
     };
   }
 
   Offset _entryPoint(WorkflowNode node) {
     final pos = _nodePos(node);
     return switch (node.kind) {
-      'worker' => Offset(pos.dx,              pos.dy + _workerHeight / 2),
-      'fan'    => Offset(pos.dx,              pos.dy + _fanHeight / 2),
-      _        => Offset(pos.dx + _pillLeft,  pos.dy + _pillVCenter),
+      'worker' => Offset(pos.dx,                 pos.dy + _workerHeight / 2),
+      'fan'    => Offset(pos.dx,                 pos.dy + _fanHeight / 2),
+      _        => Offset(pos.dx,                 pos.dy + _branchHeight / 2),
     };
   }
 
