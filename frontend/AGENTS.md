@@ -29,17 +29,25 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 | Mock data | `lib/providers/mock_data.dart` | `JobSummary`, `WorkflowSummary`, `JobState` + mock instances |
 | App shell | `lib/main.dart` | ProviderScope + ConsumerWidget shell: rail + top bar + content |
 | Static server | `serve.js` | Bun server for dev preview at trailhead-dev subdomain |
+| **Graph canvas** | `lib/widgets/canvas/graph_canvas.dart` | Pan, zoom (gesture), snap-to-grid, dot grid, bezier connections |
+| **Worker node** | `lib/widgets/canvas/worker_node.dart` | 168x36 capsule, direction F, selection glow, rail |
+| **Branch node** | `lib/widgets/canvas/routing_node.dart` | Per-port output routing, case rows |
+| **Map node** | `lib/widgets/canvas/fan_node.dart` | 168x36 single-line map capsule |
+| **Dot grid** | `lib/widgets/canvas/dot_grid_painter.dart` | 32px grid, scales with zoom |
+| **Connections** | `lib/widgets/canvas/connection_painter.dart` | Bezier edges with arrowheads |
+| **Node context menu** | `lib/widgets/canvas/node_context_menu.dart` | Right-click/long-press actions |
+| **Operator picker** | `lib/widgets/canvas/operator_picker.dart` | Insert operator on edge or after node |
+| **YAML drawer** | `lib/widgets/yaml_drawer.dart` | Right slide-over, syntax-highlighted workflow YAML |
+| **Runs table** | `lib/widgets/runs_table.dart` | Grouped/flat history view |
+| **View toggle** | `lib/widgets/view_toggle.dart` | Grouped/flat toggle |
+| **Canvas controller** | `lib/providers/canvas_controller.dart` | `CanvasViewport` (zoom + pan), `setZoom()`, `zoomBy()` |
 
 ### Not Yet Implemented
 
-- ~~Sidebars (Workflows sidebar, Jobs sidebar)~~
-- Canvas (workflow graph visualization)
-- Stage drawer (right slide-over)
 - Snapshot filmstrip (bottom strip)
-- Runs table (History mode)
 - API client (backend connectivity)
 - Routing (multiple pages)
-- Graph rendering (`vyuh_node_flow`)
+- **Zoom control UI overlay** — zoom exists in controller but no `−`/`+`/reset bar yet
 
 ## Build Commands
 
@@ -82,19 +90,42 @@ The dev preview uses **mock backend data** baked into the Flutter build (no API 
 frontend/
 ├── lib/
 │   ├── main.dart              # TrailheadApp (ProviderScope) + TrailheadShell (ConsumerWidget)
+│   ├── models/
+│   │   ├── workflow_document.dart  # WorkflowDocument (workflow + viewport snapshot)
+│   │   ├── workflow_edge.dart      # WorkflowEdge (from, to, case, loop)
+│   │   └── workflow_node.dart      # WorkflowNode (id, kind, label, pos, outputs)
 │   ├── providers/
-│   │   ├── mode_provider.dart # modeProvider, selectedJobProvider, workflowProvider
-│   │   └── mock_data.dart     # JobSummary, WorkflowSummary, JobState + mock data
+│   │   ├── canvas_controller.dart   # CanvasViewport + CanvasController (zoom/pan)
+│   │   ├── mode_provider.dart       # modeProvider, selectedJobProvider, workflowProvider
+│   │   ├── mock_data.dart           # JobSummary, WorkflowSummary, JobState + mock data
+│   │   ├── node_menu_provider.dart  # Node context menu anchor state
+│   │   └── operator_picker_provider.dart  # Operator picker anchor state
 │   ├── theme/
 │   │   └── tokens.dart        # AppColors, AppSpacing, AppRadius
+│   ├── utils/
+│   │   └── workflow_to_yaml.dart  # workflowToYaml() for YAML drawer
 │   └── widgets/
 │       ├── app_button.dart    # AppButton (ghost/secondary/trail/primary/danger)
+│       ├── canvas/
+│       │   ├── branch_node.dart        # BranchNode widget (per-port routing)
+│       │   ├── connection_painter.dart # Bezier edges with arrowheads
+│       │   ├── dot_grid_painter.dart   # 32px dot grid, scales with zoom
+│       │   ├── fan_node.dart           # MapNode (168x36 capsule)
+│       │   ├── graph_canvas.dart       # Main canvas: pan, zoom, nodes, edges, snap
+│       │   ├── node_context_menu.dart  # Right-click/long-press node actions
+│       │   ├── operator_picker.dart    # Insert operator popover
+│       │   ├── worker_node.dart        # WorkerNode (168x36 direction F capsule)
+│       │   └── zoom_controls.dart      # Zoom bar: − / % / + / fit (TODO)
+│       ├── delete_button.dart # Circular delete button with icon
 │       ├── icons.dart         # TrailheadIcon (12 Lucide SVG stroke icons)
+│       ├── jobs_sidebar.dart  # JobsSidebar (Active + History, 260px)
 │       ├── mode_rail.dart     # ModeRail (ConsumerWidget) + AppMode enum
+│       ├── runs_table.dart    # Grouped/flat history runs table
 │       ├── status_tag.dart    # StatusDot + StatusTag
 │       ├── top_bar.dart       # TopBar (ConsumerWidget) + BuildBar/JobBar/HistoryListBar
+│       ├── view_toggle.dart   # Grouped/flat view toggle
 │       ├── workflows_sidebar.dart # WorkflowsSidebar (Build mode, 240px)
-│       └── jobs_sidebar.dart  # JobsSidebar (Active + History, 260px)
+│       └── yaml_drawer.dart   # Right slide-over, syntax-highlighted YAML
 ├── serve.js                   # Bun static server for dev preview
 ├── assets/
 │   └── images/

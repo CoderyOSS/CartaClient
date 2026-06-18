@@ -17,6 +17,18 @@ CoderyTrailhead/
 
 For frontend work, read `frontend/AGENTS.md`. For backend work, read `crates/trailhead-service/AGENTS.md`.
 
+## ⚠️ CRITICAL: Design Prototype vs Real Product
+
+| Directory | What it is | Language | Do NOT edit |
+|-----------|-----------|----------|-------------|
+| `frontend/` | **THE REAL PRODUCT** — Flutter app | Dart | |
+| `design/` | **DESIGN PROTOTYPE** — HTML/JS exploration | React/JSX | ✓ |
+| `design/export/`, `design/handoff/` | Build outputs of prototype | JSX | ✓ |
+
+When asked to implement UI features, **ALWAYS work in `frontend/`**. The `design/`
+files look similar (Canvas, WorkerNode, GraphCanvas) but are **NOT** the source of
+truth. They are a reference for design direction only.
+
 ## Purpose
 
 Trailhead Service = AI workflow orchestration. Runs multi-stage LLM workflows across ephemeral worker containers. Workers code on USER projects, not Trailhead itself.
