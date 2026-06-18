@@ -416,10 +416,9 @@ class GraphCanvas extends ConsumerWidget {
                                 ),
                                 if (isSelected && editable)
                                   Positioned(
-                                    left: 0 - 44.0 / viewport.zoom,
-                                    top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0 / viewport.zoom,
+                                    left: -44.0,
+                                    top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0,
                                     child: _InputHandle(
-                                      inverseZoom: 1.0 / viewport.zoom,
                                       onTap: () {},
                                     ),
                                   ),
@@ -427,12 +426,11 @@ class GraphCanvas extends ConsumerWidget {
                                   ...node.outputs.isNotEmpty
                                       ? node.outputs.asMap().entries.map((e) {
                                           final port = e.key;
-                                          final top = BranchNode.padY + port * BranchNode.rowHeight + BranchNode.rowHeight / 2 - (BranchNode.rowHeight / viewport.zoom) / 2;
+                                          final top = BranchNode.padY + port * BranchNode.rowHeight;
                                           return Positioned(
-                                            left: BranchNode.width - 22.0 / viewport.zoom,
+                                            left: BranchNode.width - 22.0,
                                             top: top,
                                             child: _OutputHandle(
-                                              inverseZoom: 1.0 / viewport.zoom,
                                               targetWidth: 44.0,
                                               targetHeight: BranchNode.rowHeight,
                                               onTap: () => showPicker(
@@ -449,10 +447,9 @@ class GraphCanvas extends ConsumerWidget {
                                       : [
                                           // Fallback for branch nodes with no outputs defined
                                           Positioned(
-                                            left: BranchNode.width - 44.0 / viewport.zoom,
-                                            top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0 / viewport.zoom,
+                                            left: BranchNode.width - 44.0,
+                                            top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0,
                                             child: _OutputHandle(
-                                              inverseZoom: 1.0 / viewport.zoom,
                                               onTap: () => showPicker(
                                                 Offset(
                                                   displayX + BranchNode.width,
@@ -465,10 +462,9 @@ class GraphCanvas extends ConsumerWidget {
                                         ],
                                 if (isSelected && editable && node.kind != 'branch')
                                   Positioned(
-                                    left: nodeWidth(node.kind) - 44.0 / viewport.zoom,
-                                    top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0 / viewport.zoom,
+                                    left: nodeWidth(node.kind) - 44.0,
+                                    top: nodeHeight(node.kind, outputs: node.outputs) / 2 - 44.0,
                                     child: _OutputHandle(
-                                      inverseZoom: 1.0 / viewport.zoom,
                                       onTap: () => showPicker(
                                         Offset(
                                           displayX + nodeWidth(node.kind),
@@ -518,13 +514,11 @@ class GraphCanvas extends ConsumerWidget {
 }
 
 class _OutputHandle extends StatelessWidget {
-  final double inverseZoom;
   final VoidCallback onTap;
   final double targetWidth;
   final double targetHeight;
 
   const _OutputHandle({
-    required this.inverseZoom,
     required this.onTap,
     this.targetWidth = 88.0,
     this.targetHeight = 88.0,
@@ -533,12 +527,12 @@ class _OutputHandle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Direct world-space sizing so hit area exactly matches visual area.
-    final width = targetWidth * inverseZoom;
-    final height = targetHeight * inverseZoom;
-    final dotSize = 12.0 * inverseZoom;
-    final borderWidth = 2.0 * inverseZoom;
-    final ringSpread = 1.0 * inverseZoom;
-    final glowBlur = 8.0 * inverseZoom;
+    const width = 88.0;
+    const height = 88.0;
+    const dotSize = 12.0;
+    const borderWidth = 2.0;
+    const ringSpread = 1.0;
+    const glowBlur = 8.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -577,21 +571,19 @@ class _OutputHandle extends StatelessWidget {
 }
 
 class _InputHandle extends StatelessWidget {
-  final double inverseZoom;
   final VoidCallback onTap;
 
   const _InputHandle({
-    required this.inverseZoom,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final size = 88.0 * inverseZoom;
-    final dotSize = 12.0 * inverseZoom;
-    final borderWidth = 2.0 * inverseZoom;
-    final ringSpread = 1.0 * inverseZoom;
-    final glowBlur = 8.0 * inverseZoom;
+    const size = 88.0;
+    const dotSize = 12.0;
+    const borderWidth = 2.0;
+    const ringSpread = 1.0;
+    const glowBlur = 8.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
