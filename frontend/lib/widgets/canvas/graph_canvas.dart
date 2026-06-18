@@ -226,11 +226,15 @@ class GraphCanvas extends ConsumerWidget {
           ref.read(selectedNodeProvider.notifier).state = null;
           ref.read(operatorPickerProvider.notifier).state = null;
         },
-        onScaleStart: (_) {
-          controller.beginScale();
+        onPanUpdate: (details) {
+          if (!controller.isScaling) {
+            controller.pan(details.delta);
+          }
+        },
+        onScaleStart: (details) {
+          controller.beginScale(details.focalPoint);
         },
         onScaleUpdate: (details) {
-          controller.pan(details.focalPointDelta);
           controller.updateScale(details.scale, details.focalPoint);
         },
         onScaleEnd: (_) {
