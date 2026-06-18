@@ -39,7 +39,7 @@ class BranchNode extends StatelessWidget {
       outlineShadows = [
         BoxShadow(
           color: AppColors.accent.withValues(alpha: 0.22),
-          blurRadius: 0,
+          blurRadius: 4,
           spreadRadius: 3,
         ),
         const BoxShadow(
@@ -98,7 +98,7 @@ class BranchNode extends StatelessWidget {
             width: width,
             height: h,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.md),
+              borderRadius: BorderRadius.circular(AppRadius.md + 2),
               boxShadow: outlineShadows,
             ),
             child: ClipRRect(

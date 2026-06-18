@@ -29,7 +29,7 @@ class WorkerNode extends StatelessWidget {
       outlineShadows = [
         BoxShadow(
           color: AppColors.accent.withValues(alpha: 0.22),
-          blurRadius: 0,
+          blurRadius: 4,
           spreadRadius: 3,
         ),
         const BoxShadow(
@@ -88,7 +88,7 @@ class WorkerNode extends StatelessWidget {
             width: 168,
             height: 36,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.md),
+              borderRadius: BorderRadius.circular(AppRadius.md + 2),
               boxShadow: outlineShadows,
             ),
             child: ClipRRect(
