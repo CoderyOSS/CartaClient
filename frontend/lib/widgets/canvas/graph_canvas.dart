@@ -17,6 +17,7 @@ import '../../widgets/mode_rail.dart';
 import '../../providers/connection_drag_provider.dart';
 import '../../providers/scissors_provider.dart';
 import 'connection_painter.dart';
+import 'cut_path_painter.dart';
 import 'dot_grid_painter.dart';
 import 'marquee_painter.dart';
 import 'operator_picker.dart';
@@ -39,6 +40,17 @@ class GraphCanvas extends ConsumerWidget {
   double _snap(double value) => (value / _snapGrid).round() * _snapGrid;
   double _snapCenter(double center) => (center / _snapGrid).round() * _snapGrid;
 
+  static double _pointToSegmentDistance(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final ap = p - a;
+    final abLen2 = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (abLen2 == 0) return (p - a).distance;
+    final t = ((ap.dx * ab.dx + ap.dy * ab.dy) / abLen2).clamp(0.0, 1.0);
+    final closest = Offset(a.dx + t * ab.dx, a.dy + t * ab.dy);
+    return (p - closest).distance;
+  }
+
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final viewport = ref.watch(canvasControllerProvider);
@@ -54,6 +66,7 @@ class GraphCanvas extends ConsumerWidget {
     final menuAnchor = ref.watch(nodeMenuProvider);
     final connectionDrag = ref.watch(connectionDragProvider);
     final scissors = ref.watch(scissorsModeProvider);
+    final cutPath = ref.watch(cutPathProvider);
     final spaceHeld = ref.watch(spaceHeldProvider);
 
     // Sync in-place workflow edits to the document model and workflow list.
@@ -458,21 +471,119 @@ class GraphCanvas extends ConsumerWidget {
                           const MarqueeState();
                     }
                   : null,
-              onScaleStart: (details) {
-                if (ref.read(mouseMarqueeStartProvider) != null) return;
-                if (ref.read(touchMarqueeStartProvider) != null) return;
-                controller.beginScale(details.localFocalPoint);
-              },
-              onScaleUpdate: (details) {
-                if (ref.read(mouseMarqueeStartProvider) != null) return;
-                if (ref.read(touchMarqueeStartProvider) != null) return;
-                controller.updateScale(details.scale, details.localFocalPoint);
-              },
-              onScaleEnd: (_) {
-                if (ref.read(mouseMarqueeStartProvider) != null) return;
-                if (ref.read(touchMarqueeStartProvider) != null) return;
-                controller.endScale();
-              },
+              onScaleStart: scissors && editable
+                  ? null
+                  : (details) {
+                      if (ref.read(mouseMarqueeStartProvider) != null) return;
+                      if (ref.read(touchMarqueeStartProvider) != null) return;
+                      controller.beginScale(details.localFocalPoint);
+                    },
+              onScaleUpdate: scissors && editable
+                  ? null
+                  : (details) {
+                      if (ref.read(mouseMarqueeStartProvider) != null) return;
+                      if (ref.read(touchMarqueeStartProvider) != null) return;
+                      controller.updateScale(details.scale, details.localFocalPoint);
+                    },
+              onScaleEnd: scissors && editable
+                  ? null
+                  : (_) {
+                      if (ref.read(mouseMarqueeStartProvider) != null) return;
+                      if (ref.read(touchMarqueeStartProvider) != null) return;
+                      controller.endScale();
+                    },
+              onPanStart: scissors && editable
+                  ? (details) {
+                      final worldPos = Offset(
+                        (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
+                        (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
+                      );
+                      ref.read(cutPathProvider.notifier).state = [worldPos];
+                    }
+                  : null,
+              onPanUpdate: scissors && editable
+                  ? (details) {
+                      final worldPos = Offset(
+                        (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
+                        (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
+                      );
+                      ref.read(cutPathProvider.notifier).state = [
+                        ...ref.read(cutPathProvider),
+                        worldPos,
+                      ];
+                    }
+                  : null,
+              onPanEnd: scissors && editable
+                  ? (_) {
+                      final path = ref.read(cutPathProvider);
+                      if (path.length >= 2) {
+                        final threshold = 6.0 / viewport.zoom;
+                        final toDelete = <String>{};
+
+                        for (final edge in workflow.edges) {
+                          final source = workflow.nodes.firstWhere((n) => n.id == edge.sourceId);
+                          final target = workflow.nodes.firstWhere((n) => n.id == edge.targetId);
+
+                          Offset exitPoint(WorkflowNode node) {
+                            final pos = Offset(node.x, node.y);
+                            return switch (node.kind) {
+                              'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                              'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                              _        => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                            };
+                          }
+
+                          Offset entryPoint(WorkflowNode node) {
+                            final pos = Offset(node.x, node.y);
+                            return Offset(pos.dx, pos.dy + node.height / 2);
+                          }
+
+                          final p0 = exitPoint(source);
+                          final p3 = entryPoint(target);
+                          final dx = (p3.dx - p0.dx).abs();
+                          final controlLen = dx.clamp(40.0, 150.0);
+                          final p1 = Offset(p0.dx + controlLen, p0.dy);
+                          final p2 = Offset(p3.dx - controlLen, p3.dy);
+
+                          for (var i = 0; i <= 20; i++) {
+                            final t = i / 20.0;
+                            final u = 1.0 - t;
+                            final tt = t * t;
+                            final uu = u * u;
+                            final uuu = uu * u;
+                            final ttt = tt * t;
+                            final bx = uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx;
+                            final by = uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy;
+
+                            var hit = false;
+                            for (var j = 0; j < path.length - 1; j++) {
+                              final dist = _pointToSegmentDistance(
+                                Offset(bx, by),
+                                path[j],
+                                path[j + 1],
+                              );
+                              if (dist < threshold) {
+                                hit = true;
+                                break;
+                              }
+                            }
+                            if (hit) {
+                              toDelete.add('${edge.sourceId}→${edge.targetId}');
+                              break;
+                            }
+                          }
+                        }
+
+                        if (toDelete.isNotEmpty) {
+                          final current = ref.read(workflowProvider);
+                          ref.read(workflowProvider.notifier).state = current.copyWith(
+                            edges: current.edges.where((e) => !toDelete.contains('${e.sourceId}→${e.targetId}')).toList(),
+                          );
+                        }
+                      }
+                      ref.read(cutPathProvider.notifier).state = const [];
+                    }
+                  : null,
               child: Container(
           decoration: const BoxDecoration(
             gradient: AppColors.hearthGradient,
@@ -683,20 +794,20 @@ class GraphCanvas extends ConsumerWidget {
                                           );
                                         }
                                       : null,
-                                  onPanStart: editable
+                                  onPanStart: editable && !scissors
                                       ? (_) {
                                           ref.read(draggingNodeIdProvider.notifier).state = node.id;
                                           ref.read(dragOffsetProvider.notifier).state = Offset.zero;
                                         }
                                       : null,
-                                  onPanUpdate: editable
+                                  onPanUpdate: editable && !scissors
                                       ? (details) {
                                           if (draggingNodeId == node.id) {
                                             ref.read(dragOffsetProvider.notifier).state += details.delta;
                                           }
                                         }
                                       : null,
-                                  onPanEnd: editable
+                                  onPanEnd: editable && !scissors
                                       ? (_) {
                                           if (draggingNodeId != node.id) return;
                                           final offset = ref.read(dragOffsetProvider);
@@ -721,7 +832,7 @@ class GraphCanvas extends ConsumerWidget {
                                           ref.read(dragOffsetProvider.notifier).state = Offset.zero;
                                         }
                                       : null,
-                                  onPanCancel: editable
+                                  onPanCancel: editable && !scissors
                                       ? () {
                                           ref.read(draggingNodeIdProvider.notifier).state = null;
                                           ref.read(dragOffsetProvider.notifier).state = Offset.zero;
@@ -885,6 +996,15 @@ class GraphCanvas extends ConsumerWidget {
                             ),
                           );
                         }),
+
+                        // Cut path overlay (scissors mode drag line)
+                        if (cutPath.isNotEmpty)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: CutPathPainter(points: cutPath),
+                              size: Size.infinite,
+                            ),
+                          ),
 
                         ],
                       ),
