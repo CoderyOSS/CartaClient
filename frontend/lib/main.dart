@@ -52,6 +52,28 @@ class TrailheadShell extends ConsumerWidget {
     final yamlOpen = mode == AppMode.build && ref.watch(yamlDrawerOpenProvider);
     final workflow = ref.watch(workflowProvider);
     final settingsOpen = ref.watch(settingsModalOpenProvider);
+    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+
+    Widget workflowRegion() {
+      return Row(
+        children: [
+          ModeRail(activeCount: 3),
+          if (showSidebar) _buildSidebar(mode, ref),
+          Expanded(
+            child: Column(
+              children: [
+                TopBar(),
+                Expanded(
+                  child: mode == AppMode.history && job == null
+                      ? RunsTable()
+                      : GraphCanvas(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return Scaffold(
       body: Stack(
@@ -59,30 +81,33 @@ class TrailheadShell extends ConsumerWidget {
           Column(
             children: [
               Expanded(
-                child: Row(
-                  children: [
-                    ModeRail(activeCount: 3),
-                    if (showSidebar) _buildSidebar(mode, ref),
-                    Expanded(
-                      child: Column(
+                child: isPortrait && yamlOpen
+                    ? Column(
                         children: [
-                          TopBar(),
+                          Expanded(child: workflowRegion()),
                           Expanded(
-                            child: mode == AppMode.history && job == null
-                                ? RunsTable()
-                                : GraphCanvas(),
+                            child: YamlDrawer(
+                              workflow: workflow,
+                              onClose: () => ref
+                                  .read(yamlDrawerOpenProvider.notifier)
+                                  .state = false,
+                              isPortrait: true,
+                            ),
                           ),
                         ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: workflowRegion()),
+                          if (yamlOpen)
+                            YamlDrawer(
+                              workflow: workflow,
+                              onClose: () => ref
+                                  .read(yamlDrawerOpenProvider.notifier)
+                                  .state = false,
+                            ),
+                        ],
                       ),
-                    ),
-                    if (yamlOpen)
-                      YamlDrawer(
-                        workflow: workflow,
-                        onClose: () =>
-                            ref.read(yamlDrawerOpenProvider.notifier).state = false,
-                      ),
-                  ],
-                ),
               ),
               Container(height: 1, color: AppColors.border1),
             ],

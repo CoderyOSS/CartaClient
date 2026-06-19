@@ -6,11 +6,11 @@ class ThemeController extends ChangeNotifier {
   factory ThemeController() => _instance;
   ThemeController._internal();
 
-  TrailheadThemeData _current = _buildTheme('hearth', 'orange');
+  TrailheadThemeData _current = _buildTheme('slate', 'green');
   TrailheadThemeData get current => _current;
 
-  String _theme = 'hearth';
-  String _accent = 'orange';
+  String _theme = 'slate';
+  String _accent = 'green';
 
   String get theme => _theme;
   String get accent => _accent;

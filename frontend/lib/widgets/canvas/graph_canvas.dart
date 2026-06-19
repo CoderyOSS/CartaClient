@@ -20,6 +20,7 @@ import 'connection_painter.dart';
 import 'cut_path_painter.dart';
 import 'dot_grid_painter.dart';
 import 'marquee_painter.dart';
+import 'mode_flash_overlay.dart';
 import 'operator_picker.dart';
 import '../../providers/marquee_provider.dart';
 import '../../providers/node_menu_provider.dart';
@@ -67,6 +68,7 @@ class GraphCanvas extends ConsumerWidget {
     final connectionDrag = ref.watch(connectionDragProvider);
     final scissors = ref.watch(scissorsModeProvider);
     final cutPath = ref.watch(cutPathProvider);
+    final flash = ref.watch(flashOverlayProvider);
     final spaceHeld = ref.watch(spaceHeldProvider);
 
     // Sync in-place workflow edits to the document model and workflow list.
@@ -444,6 +446,11 @@ class GraphCanvas extends ConsumerWidget {
                       if (next) {
                         ref.read(selectionProvider.notifier).clear();
                       }
+                      final currentFlash = ref.read(flashOverlayProvider);
+                      ref.read(flashOverlayProvider.notifier).state = (
+                        mode: next ? FlashMode.scissors : FlashMode.cursor,
+                        id: (currentFlash?.id ?? 0) + 1,
+                      );
                     }
                   : null,
               onLongPressStart: editable
@@ -1093,6 +1100,15 @@ class GraphCanvas extends ConsumerWidget {
                     ),
                   ),
                 ),
+                // Mode-change flash overlay
+                if (flash != null)
+                  ModeFlashOverlay(
+                    key: ValueKey(flash.id),
+                    mode: flash.mode,
+                    onDismiss: () {
+                      ref.read(flashOverlayProvider.notifier).state = null;
+                    },
+                  ),
               ],
             ),
           ),

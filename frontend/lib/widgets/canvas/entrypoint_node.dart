@@ -159,7 +159,7 @@ class EntrypointNode extends StatelessWidget {
             ),
           ),
           // Output connector only — no input connector on entrypoint
-          const _ConnectorDot(left: false),
+          _ConnectorDot(left: false),
           if (running)
             Positioned(
               left: 36,

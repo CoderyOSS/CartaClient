@@ -17,7 +17,7 @@ class SettingsState {
 
   const SettingsState({
     this.theme = 'slate',
-    this.accent = 'orange',
+    this.accent = 'green',
     this.density = 'comfortable',
     this.canvasStyle = 'graph',
     this.edgeStyle = 'curved',

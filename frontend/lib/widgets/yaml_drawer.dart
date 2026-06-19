@@ -12,12 +12,14 @@ class YamlDrawer extends ConsumerStatefulWidget {
   final WorkflowSummary workflow;
   final JobSummary? job;
   final VoidCallback onClose;
+  final bool isPortrait;
 
   const YamlDrawer({
     super.key,
     required this.workflow,
     this.job,
     required this.onClose,
+    this.isPortrait = false,
   });
 
   @override
@@ -80,11 +82,17 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
     final search = _searchController.text.trim().toLowerCase();
 
     return Container(
-      width: 460,
+      width: widget.isPortrait ? double.infinity : 460,
+      height: widget.isPortrait ? double.infinity : null,
       decoration: BoxDecoration(
         color: AppColors.bg1,
         border: Border(
-          left: BorderSide(color: AppColors.border1, width: 1),
+          top: widget.isPortrait
+              ? BorderSide(color: AppColors.border1, width: 1)
+              : BorderSide.none,
+          left: widget.isPortrait
+              ? BorderSide.none
+              : BorderSide(color: AppColors.border1, width: 1),
         ),
       ),
       child: Column(

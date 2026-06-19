@@ -96,14 +96,28 @@ class CanvasToolbar extends ConsumerWidget {
           children: [
             if (editable) ...[
               toolBtn(
-                onTap: () => ref.read(scissorsModeProvider.notifier).state = false,
+                onTap: () {
+                  ref.read(scissorsModeProvider.notifier).state = false;
+                  final currentFlash = ref.read(flashOverlayProvider);
+                  ref.read(flashOverlayProvider.notifier).state = (
+                    mode: FlashMode.cursor,
+                    id: (currentFlash?.id ?? 0) + 1,
+                  );
+                },
                 icon: TrailheadIconData.mousePointer,
                 active: !scissors,
                 tooltip: 'Select — move and select nodes',
               ),
               const SizedBox(height: 2),
               toolBtn(
-                onTap: () => ref.read(scissorsModeProvider.notifier).state = true,
+                onTap: () {
+                  ref.read(scissorsModeProvider.notifier).state = true;
+                  final currentFlash = ref.read(flashOverlayProvider);
+                  ref.read(flashOverlayProvider.notifier).state = (
+                    mode: FlashMode.scissors,
+                    id: (currentFlash?.id ?? 0) + 1,
+                  );
+                },
                 icon: TrailheadIconData.scissors,
                 active: scissors,
                 tooltip: 'Scissors — cut connections (or double-tap canvas)',
