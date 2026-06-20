@@ -50,6 +50,10 @@ function App() {
   const [activeWfId, setActiveWfId]       = useStateApp(WORKFLOW.id);
   const [buildSelectedStage, setBuildSel] = useStateApp(null);
 
+  // Workflow list is stateful so renames/creates/deletes from the header
+  // dropdown persist and reflect in the trigger + canvas immediately.
+  const [workflows, setWorkflows]         = useStateApp(WORKFLOWS_LIST);
+
   const [activeJobId, setActiveJobId]     = useStateApp("r_8f2a91c");
   const [activeStageSel, setActiveStage]  = useStateApp(null);
   const [jobState, setJobState]           = useStateApp(JOB.state);
@@ -72,6 +76,25 @@ function App() {
   const activeJobs  = useMemoApp(() => JOBS_LOG.filter(j => ACTIVE_STATUSES_APP.has(j.status)),  []);
   const historyJobs = useMemoApp(() => JOBS_LOG.filter(j => HISTORY_STATUSES_APP.has(j.status)), []);
   const activeJobCount = activeJobs.length;
+
+  // The workflow shown in the build header + canvas — its name tracks the
+  // stateful list so an inline rename updates everywhere at once.
+  const currentWf = useMemoApp(() => workflows.find(w => w.id === activeWfId), [workflows, activeWfId]);
+  const displayWorkflow = currentWf ? { ...WORKFLOW, id: currentWf.id, name: currentWf.name } : WORKFLOW;
+
+  const createWorkflow = () => {
+    const id = "wf_" + Math.random().toString(36).slice(2, 8);
+    setWorkflows(ws => [{ id, name: "untitled-workflow", runs: 0, last: "\u2014", active: 0 }, ...ws]);
+    setActiveWfId(id);
+    setBuildSel(null);
+    return id;
+  };
+  const renameWorkflow = (id, name) => setWorkflows(ws => ws.map(w => w.id === id ? { ...w, name } : w));
+  const deleteWorkflow = (id) => setWorkflows(ws => {
+    const next = ws.filter(w => w.id !== id);
+    if (id === activeWfId && next[0]) { setActiveWfId(next[0].id); setBuildSel(null); }
+    return next;
+  });
 
   // ── Derive what the main area shows ────────────────────────────────────
   // The selected job in active/history maps to JOB (the single mock job
@@ -232,10 +255,13 @@ function App() {
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, position: "relative" }}>
         <TopBar
           mode={mode}
-          workflow={WORKFLOW}
-          workflows={WORKFLOWS_LIST}
+          workflow={displayWorkflow}
+          workflows={workflows}
           activeWfId={activeWfId}
           onPickWorkflow={(id) => { setActiveWfId(id); setBuildSel(null); }}
+          onRenameWorkflow={renameWorkflow}
+          onCreateWorkflow={createWorkflow}
+          onDeleteWorkflow={deleteWorkflow}
           job={currentJob}
           jobState={mode === "history" && currentJob ? currentJob.status : jobState}
           onPlay={() => setJobState("running")}

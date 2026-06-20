@@ -100,34 +100,189 @@ function ModeBadge({ mode }) {
 // pip, plus "new workflow" and per-row delete — everything the sidebar did.
 // ──────────────────────────────────────────────────────────────────────────
 
-function WorkflowMenuRow({ wf, active, onPick, onDelete }) {
+// Coarse-pointer / no-hover detection. On touch we can't rely on :hover to
+// reveal row actions, so we keep them always visible there.
+function useIsTouch() {
+  const [touch, setTouch] = useStateTB(false);
+  useEffectTB(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(hover: none), (pointer: coarse)");
+    const sync = () => setTouch(mq.matches);
+    sync();
+    mq.addEventListener ? mq.addEventListener("change", sync) : mq.addListener(sync);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", sync) : mq.removeListener(sync); };
+  }, []);
+  return touch;
+}
+
+// Workflow names are mono identifiers — lower-kebab, like `pr-reviewer`.
+// Sanitize as the user types so the field can't hold an illegal name.
+function sanitizeWfName(s) {
+  return String(s).toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+// Inline name editor — shared by the trigger and the menu rows. Auto-focuses
+// and selects, sanitizes live, validates empty + duplicate, and offers an
+// explicit check / cancel pair (essential on touch, where blur/Enter is
+// invisible). Enter / check commits, Esc / cancel reverts, blur
+// commits-if-valid else reverts.
+function InlineRename({ initial, siblings, size, onCommit, onCancel }) {
+  const [val, setVal] = useStateTB(initial);
+  const inputRef = useRefTB(null);
+  const committedRef = useRefTB(false);
+
+  useEffectTB(() => {
+    const el = inputRef.current;
+    if (el) { el.focus(); el.select(); }
+  }, []);
+
+  const clean = sanitizeWfName(val).replace(/^-+|-+$/g, "");
+  const lower = clean.toLowerCase();
+  const dupe = (siblings || []).some(n => n.toLowerCase() === lower);
+  const empty = clean.length === 0;
+  const invalid = empty || dupe;
+  const err = empty ? "name can't be empty" : dupe ? "name already in use" : "";
+
+  const finish = (fn) => { committedRef.current = true; fn(); };
+  const commit = () => { if (!invalid) finish(() => onCommit(clean)); };
+  const cancel = () => finish(() => onCancel());
+
+  const big = size === "trigger";
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 5, width: "100%", minWidth: 0 }}>
+      <input
+        ref={inputRef}
+        value={val}
+        spellCheck={false}
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="off"
+        inputMode="text"
+        aria-label="workflow name"
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        }}
+        onBlur={() => { if (committedRef.current) return; invalid ? cancel() : commit(); }}
+        style={{
+          flex: 1, minWidth: 0,
+          fontFamily: "var(--co-font-mono)",
+          fontSize: big ? 13 : 11.5,
+          fontWeight: big ? 600 : 500,
+          color: "var(--co-text-strong)",
+          background: "var(--co-bg-0)",
+          border: "1px solid",
+          borderColor: invalid ? "var(--co-danger)" : "var(--co-accent)",
+          borderRadius: 6,
+          padding: big ? "6px 8px" : "5px 7px",
+          outline: "none",
+          boxShadow: invalid
+            ? "0 0 0 3px color-mix(in oklab, var(--co-danger) 22%, transparent)"
+            : "0 0 0 3px color-mix(in oklab, var(--co-accent) 22%, transparent)",
+        }}
+      />
+      <button
+        type="button"
+        title="save name"
+        aria-label="save name"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={(e) => { e.stopPropagation(); commit(); }}
+        disabled={invalid}
+        style={renameIconBtn(true, invalid)}
+      >
+        <Icon name="check" size={14} color="currentColor" />
+      </button>
+      <button
+        type="button"
+        title="cancel"
+        aria-label="cancel rename"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={(e) => { e.stopPropagation(); cancel(); }}
+        style={renameIconBtn(false, false)}
+      >
+        <span style={{ display: "inline-flex", transform: "rotate(45deg)", lineHeight: 0 }}>
+          <Icon name="plus" size={14} color="currentColor" />
+        </span>
+      </button>
+      {invalid && val.trim().length > 0 && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0,
+          fontFamily: "var(--co-font-mono)", fontSize: 9.5,
+          color: "var(--co-danger)", whiteSpace: "nowrap",
+          pointerEvents: "none", zIndex: 2,
+        }}>{err}</div>
+      )}
+    </div>
+  );
+}
+
+function renameIconBtn(primary, disabled) {
+  return {
+    flex: "0 0 auto",
+    width: 30, height: 30, borderRadius: 7,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    background: primary ? (disabled ? "var(--co-bg-2)" : "var(--co-accent-soft)") : "var(--co-bg-2)",
+    color: primary ? (disabled ? "var(--co-text-disabled)" : "var(--co-accent)") : "var(--co-text-subtle)",
+    border: "1px solid",
+    borderColor: primary && !disabled ? "color-mix(in oklab, var(--co-accent) 35%, transparent)" : "var(--co-border-1)",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+function rowActionBtn() {
+  return {
+    flex: "0 0 auto",
+    width: 30, height: 30, borderRadius: 7,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    background: "var(--co-bg-3)", border: "1px solid var(--co-border-1)",
+    color: "var(--co-text-subtle)", cursor: "pointer",
+  };
+}
+
+function WorkflowMenuRow({ wf, active, editing, touch, siblings, onPick, onStartRename, onRename, onCancelRename, onDelete }) {
   const [hover, setHover] = useStateTB(false);
+
+  if (editing) {
+    return (
+      <div style={{ padding: "3px 4px" }}>
+        <InlineRename
+          initial={wf.name}
+          siblings={siblings}
+          size="row"
+          onCommit={(name) => onRename(wf.id, name)}
+          onCancel={onCancelRename}
+        />
+      </div>
+    );
+  }
+
+  // Actions are always rendered so the row never reflows; on hover-capable
+  // pointers they fade in, on touch they stay lit (no hover to depend on).
+  const showActions = touch || hover;
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ position: "relative", display: "flex", alignItems: "center" }}
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px" }}
     >
       <button
         type="button"
         onClick={() => onPick(wf.id)}
         style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          alignItems: "center",
-          gap: 8,
-          padding: "6px 8px",
+          flex: 1, minWidth: 0,
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "5px 6px",
           background: active ? "var(--co-bg-3)" : hover ? "var(--co-bg-2)" : "transparent",
-          border: "none",
-          borderRadius: 4,
-          textAlign: "left",
-          cursor: "pointer",
-          fontFamily: "var(--co-font-mono)",
+          border: "none", borderRadius: 5,
+          textAlign: "left", cursor: "pointer",
           transition: "background 140ms var(--co-ease-out)",
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
             fontFamily: "var(--co-font-mono)", fontSize: 11.5,
             color: active ? "var(--co-text-strong)" : "var(--co-text)",
@@ -141,90 +296,185 @@ function WorkflowMenuRow({ wf, active, onPick, onDelete }) {
             {wf.runs.toLocaleString()} runs · last {wf.last}
           </div>
         </div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-          {wf.active > 0 && (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 4,
-              fontFamily: "var(--co-font-mono)", fontSize: 10,
-              color: "var(--co-accent)",
-            }}>
-              <StatusDot status="running" pulse size={5} />
-              {wf.active}
-            </span>
-          )}
-        </span>
+        {wf.active > 0 && (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4, flex: "0 0 auto",
+            fontFamily: "var(--co-font-mono)", fontSize: 10, color: "var(--co-accent)",
+          }}>
+            <StatusDot status="running" pulse size={5} />
+            {wf.active}
+          </span>
+        )}
       </button>
-      {hover && (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto",
+        opacity: showActions ? 1 : 0,
+        pointerEvents: showActions ? "auto" : "none",
+        transition: "opacity 140ms var(--co-ease-out)",
+      }}>
+        <button
+          type="button"
+          title="rename workflow"
+          aria-label={`rename ${wf.name}`}
+          onClick={(e) => { e.stopPropagation(); onStartRename(wf.id); }}
+          style={rowActionBtn()}
+        >
+          <Icon name="pencil" size={13} color="currentColor" />
+        </button>
         <button
           type="button"
           title="delete workflow"
+          aria-label={`delete ${wf.name}`}
           onClick={(e) => { e.stopPropagation(); onDelete(wf.id); }}
-          style={{
-            position: "absolute", right: 8,
-            width: 24, height: 24, borderRadius: 6,
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            background: "var(--co-bg-3)", border: "1px solid var(--co-border-1)",
-            color: "var(--co-text-subtle)", cursor: "pointer",
-          }}
+          style={rowActionBtn()}
         >
-          <Icon name="trash" size={12} color="currentColor" />
+          <Icon name="trash" size={13} color="currentColor" />
         </button>
-      )}
+      </div>
     </div>
   );
 }
 
-function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, defaultOpen }) {
+function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, onRenameWorkflow, onCreateWorkflow, onDeleteWorkflow, defaultOpen }) {
   const [open, setOpen] = useStateTB(!!defaultOpen);
-  const [hidden, setHidden] = useStateTB(() => new Set());
+  const [triggerEditing, setTriggerEditing] = useStateTB(false);
+  const [editingRowId, setEditingRowId] = useStateTB(null);
+  // Local fallback state so the component is fully self-contained when used
+  // without handlers (e.g. the handoff doc specimen): renames + deletes +
+  // creates still work, they just don't persist past the mount.
+  const [localNames, setLocalNames] = useStateTB({});
+  const [localHidden, setLocalHidden] = useStateTB(() => new Set());
+  const [localExtra, setLocalExtra] = useStateTB([]);
   const ref = useRefTB(null);
+  const touch = useIsTouch();
+
+  const editingActive = triggerEditing || editingRowId != null;
 
   useEffectTB(() => {
-    if (!open) return;
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
+    if (!open && !triggerEditing) return;
+    const onDoc = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false); setTriggerEditing(false); setEditingRowId(null);
+      }
+    };
+    const onKey = (e) => {
+      // InlineRename owns Escape while editing; only collapse the panel here.
+      if (e.key === "Escape" && !triggerEditing && editingRowId == null) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDoc);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [open]);
+    return () => { document.removeEventListener("pointerdown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open, triggerEditing, editingRowId]);
 
-  const list = (workflows || []).filter(wf => !hidden.has(wf.id));
-  const removeWf = (id) => setHidden(h => { const n = new Set(h); n.add(id); return n; });
-  const pick = (id) => { onPickWorkflow(id); setOpen(false); };
+  // Compose the visible list from props + local fallback overlays.
+  const list = [...localExtra, ...(workflows || [])]
+    .filter(wf => !localHidden.has(wf.id))
+    .map(wf => localNames[wf.id] ? { ...wf, name: localNames[wf.id] } : wf);
+
+  const displayName = localNames[workflow.id] || workflow.name;
+  const namesExcept = (id) => list.filter(w => w.id !== id).map(w => w.name);
+
+  const pick = (id) => { onPickWorkflow && onPickWorkflow(id); setOpen(false); };
+
+  const commitRename = (id, name) => {
+    if (onRenameWorkflow) onRenameWorkflow(id, name);
+    else setLocalNames(m => ({ ...m, [id]: name }));
+    setEditingRowId(null);
+    setTriggerEditing(false);
+  };
+
+  const removeWf = (id) => {
+    if (onDeleteWorkflow) onDeleteWorkflow(id);
+    else setLocalHidden(h => { const n = new Set(h); n.add(id); return n; });
+    if (editingRowId === id) setEditingRowId(null);
+  };
+
+  const createWf = () => {
+    let id;
+    if (onCreateWorkflow) {
+      id = onCreateWorkflow();
+    } else {
+      id = "wf_" + Math.random().toString(36).slice(2, 8);
+      setLocalExtra(x => [{ id, name: "untitled-workflow", runs: 0, last: "—", active: 0 }, ...x]);
+    }
+    // Drop the freshly-created workflow straight into rename — create is name.
+    if (id) { setOpen(true); setEditingRowId(id); }
+  };
 
   return (
     <div ref={ref} style={{ position: "relative", flex: "0 0 auto", width: 288 }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: "flex", alignItems: "center", gap: 9,
-          width: "100%",
-          padding: "8px 10px",
+      {triggerEditing ? (
+        <div style={{
+          display: "flex", alignItems: "center", width: "100%",
+          padding: "5px 6px",
+          background: "var(--co-bg-1)",
+          border: "1px solid var(--co-accent)",
+          borderRadius: 8,
+        }}>
+          <InlineRename
+            initial={displayName}
+            siblings={namesExcept(workflow.id)}
+            size="trigger"
+            onCommit={(name) => commitRename(workflow.id, name)}
+            onCancel={() => setTriggerEditing(false)}
+          />
+        </div>
+      ) : (
+        <div style={{
+          display: "flex", alignItems: "stretch", width: "100%",
           background: "var(--co-bg-1)",
           border: "1px solid", borderColor: open ? "var(--co-accent)" : "var(--co-border-2)",
-          borderRadius: 8,
-          cursor: "pointer", minWidth: 0,
+          borderRadius: 8, overflow: "hidden",
           transition: "border-color 140ms var(--co-ease-out)",
-        }}
-      >
-        <span style={{
-          flex: 1, minWidth: 0,
-          fontFamily: "var(--co-font-mono)", fontSize: 13, fontWeight: 600,
-          color: "var(--co-text)",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          textAlign: "left",
-        }}>{workflow.name}</span>
-        <span style={{
-          flex: "0 0 auto",
-          width: 0, height: 0,
-          borderLeft: "4px solid transparent",
-          borderRight: "4px solid transparent",
-          borderTop: "4px solid var(--co-text-muted)",
-          transform: open ? "rotate(180deg)" : "rotate(0)",
-          transition: "transform 160ms var(--co-ease-out)",
-        }} />
-      </button>
+        }}>
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            onDoubleClick={() => { setOpen(false); setTriggerEditing(true); }}
+            title="switch workflow"
+            style={{
+              flex: 1, minWidth: 0,
+              display: "flex", alignItems: "center", gap: 9,
+              padding: "8px 10px",
+              background: "transparent", border: "none",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{
+              flex: 1, minWidth: 0,
+              fontFamily: "var(--co-font-mono)", fontSize: 13, fontWeight: 600,
+              color: "var(--co-text)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              textAlign: "left",
+            }}>{displayName}</span>
+            <span style={{
+              flex: "0 0 auto",
+              width: 0, height: 0,
+              borderLeft: "4px solid transparent",
+              borderRight: "4px solid transparent",
+              borderTop: "4px solid var(--co-text-muted)",
+              transform: open ? "rotate(180deg)" : "rotate(0)",
+              transition: "transform 160ms var(--co-ease-out)",
+            }} />
+          </button>
+          <button
+            type="button"
+            title="rename this workflow"
+            aria-label="rename current workflow"
+            onClick={(e) => { e.stopPropagation(); setOpen(false); setTriggerEditing(true); }}
+            style={{
+              flex: "0 0 auto",
+              width: 38,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              background: "transparent",
+              border: "none", borderLeft: "1px solid var(--co-border-1)",
+              color: "var(--co-text-subtle)", cursor: "pointer",
+            }}
+          >
+            <Icon name="pencil" size={13} color="currentColor" />
+          </button>
+        </div>
+      )}
 
       {open && (
         <div style={{
@@ -248,7 +498,7 @@ function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, defau
               letterSpacing: "0.08em", textTransform: "uppercase",
               color: "var(--co-text-subtle)", fontWeight: 500,
             }}>switch workflow · {list.length}</span>
-            <Button variant="secondary" size="sm" icon="plus">new</Button>
+            <Button variant="secondary" size="sm" icon="plus" onClick={createWf}>new</Button>
           </div>
           <div style={{ maxHeight: 340, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
             {list.map(wf => (
@@ -256,7 +506,13 @@ function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, defau
                 key={wf.id}
                 wf={wf}
                 active={wf.id === activeWfId}
+                editing={editingRowId === wf.id}
+                touch={touch}
+                siblings={namesExcept(wf.id)}
                 onPick={pick}
+                onStartRename={(id) => setEditingRowId(id)}
+                onRename={commitRename}
+                onCancelRename={() => setEditingRowId(null)}
                 onDelete={removeWf}
               />
             ))}
@@ -267,7 +523,7 @@ function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, defau
   );
 }
 
-function BuildBar({ workflow, workflows, activeWfId, onPickWorkflow, onYaml, yamlActive }) {
+function BuildBar({ workflow, workflows, activeWfId, onPickWorkflow, onRenameWorkflow, onCreateWorkflow, onDeleteWorkflow, onYaml, yamlActive }) {
   return (
     <div style={{
       flex: 1,
@@ -279,10 +535,12 @@ function BuildBar({ workflow, workflows, activeWfId, onPickWorkflow, onYaml, yam
         workflows={workflows}
         activeWfId={activeWfId}
         onPickWorkflow={onPickWorkflow}
+        onRenameWorkflow={onRenameWorkflow}
+        onCreateWorkflow={onCreateWorkflow}
+        onDeleteWorkflow={onDeleteWorkflow}
       />
 
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-        <Button variant="ghost" size="sm" icon="copy">duplicate</Button>
         <Button variant={yamlActive ? "secondary" : "ghost"} size="sm" icon="file" onClick={onYaml}>YAML</Button>
         <span style={{ width: 1, height: 22, background: "var(--co-border-1)", margin: "0 2px" }} />
         <Button variant="secondary" size="sm">save draft</Button>
@@ -432,7 +690,7 @@ function HistoryListBar({ count }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function TopBar({
-  mode, workflow, workflows, activeWfId, onPickWorkflow, job, jobState,
+  mode, workflow, workflows, activeWfId, onPickWorkflow, onRenameWorkflow, onCreateWorkflow, onDeleteWorkflow, job, jobState,
   onPlay, onPause, onStop, onRestart, onSnapshot, onClearJob,
   historyCount, onYaml, yamlActive,
 }) {
@@ -452,7 +710,7 @@ function TopBar({
       position: "relative",
       zIndex: 30,
     }}>
-      {mode === "build" && <BuildBar workflow={workflow} workflows={workflows} activeWfId={activeWfId} onPickWorkflow={onPickWorkflow} onYaml={onYaml} yamlActive={yamlActive} />}
+      {mode === "build" && <BuildBar workflow={workflow} workflows={workflows} activeWfId={activeWfId} onPickWorkflow={onPickWorkflow} onRenameWorkflow={onRenameWorkflow} onCreateWorkflow={onCreateWorkflow} onDeleteWorkflow={onDeleteWorkflow} onYaml={onYaml} yamlActive={yamlActive} />}
       {mode === "active" && (
         <JobBar
           job={job} mode="active" jobState={jobState}

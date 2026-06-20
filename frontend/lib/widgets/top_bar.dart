@@ -556,14 +556,6 @@ class _BuildBar extends ConsumerWidget {
         ),
         const Spacer(),
         AppButton(
-          variant: AppButtonVariant.ghost,
-          size: AppButtonSize.sm,
-          icon: TrailheadIconData.copy,
-          label: 'duplicate',
-          onTap: () {},
-        ),
-        const SizedBox(width: 8),
-        AppButton(
           variant: yamlOpen ? AppButtonVariant.secondary : AppButtonVariant.ghost,
           size: AppButtonSize.sm,
           icon: TrailheadIconData.file,

@@ -560,15 +560,17 @@ function SidebarsCard() {
           right={(
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ fontFamily: "var(--co-font-mono)", fontSize: 11.5, color: "var(--co-text-muted)", lineHeight: 1.6 }}>
-                Workflow selection, creation, and deletion moved out of the old left sidebar into a <strong style={{ color: "var(--co-text-strong)" }}>header dropdown</strong> in build mode. The trigger shows the loaded workflow; the open panel lists every workflow with run stats + a live-job pip, a <strong style={{ color: "var(--co-text-strong)" }}>new</strong> button to create one, and a per-row <strong style={{ color: "var(--co-text-strong)" }}>delete</strong> that appears on hover. Workflows are <em>not</em> swiped — swipe-left-to-delete now lives only on job rows (below).
+                Workflow selection, creation, deletion, and <strong style={{ color: "var(--co-text-strong)" }}>rename</strong> moved out of the old left sidebar into a <strong style={{ color: "var(--co-text-strong)" }}>header dropdown</strong> in build mode. The trigger shows the loaded workflow and renames it <em>in place without opening</em> (the pencil beside the caret); the open panel lists every workflow with run stats + a live-job pip, a <strong style={{ color: "var(--co-text-strong)" }}>new</strong> button, and per-row <strong style={{ color: "var(--co-text-strong)" }}>rename</strong> + <strong style={{ color: "var(--co-text-strong)" }}>delete</strong>. Every control is a real tap target sized for touch — no hover-only paths. Workflows are <em>not</em> swiped — swipe-left-to-delete now lives only on job rows (below).
               </div>
               <AnatomyLegend items={[
                 { label: "trigger", desc: "loaded workflow name · mono 13px / 600 · caret rotates 180° when open · border → accent while open" },
-                { label: "panel header", desc: "'switch workflow · N' caps label · 'new' secondary+plus button creates a workflow" },
+                { label: "rename (current)", desc: "pencil split-button on the trigger edits the loaded workflow in place — does NOT open the menu · double-click the name does the same" },
+                { label: "panel header", desc: "'switch workflow · N' caps label · 'new' creates a workflow and drops it straight into rename" },
                 { label: "workflow row", desc: "name + 'N runs · last …' subtitle · bg-3 fill when active · running pip + count on the right" },
-                { label: "delete", desc: "hover reveals a 24px trash button (bg-3 + 1px border-1) pinned at row right · removes that workflow · no swipe" },
-                { label: "dismiss", desc: "click-away (mousedown outside) or Esc closes · panel animates co-reveal-down 180ms ease-out" },
-                { label: "Flutter", desc: "MenuAnchor / PopupMenuButton anchored under the header trigger · custom item rows, trailing delete IconButton on hover" },
+                { label: "row actions", desc: "rename (pencil) + delete (trash), 30px targets · fade in on hover, always lit on touch (no hover dependency)" },
+                { label: "rename editor", desc: "inline input + ✓/✕ · auto-select · sanitizes to lower-kebab · blocks empty + duplicate (red ring, 'name already in use') · Enter/✓ commits, Esc/✕ reverts" },
+                { label: "dismiss", desc: "click-away (pointerdown outside) or Esc closes · panel animates co-reveal-down 180ms ease-out" },
+                { label: "Flutter", desc: "MenuAnchor / PopupMenuButton under the trigger · custom item rows · rename = inline TextField with TextInputAction.done + onSubmitted · trailing rename/delete IconButtons" },
               ]} />
             </div>
           )}
@@ -645,7 +647,7 @@ function TopBarCard() {
         </Stage>
       </SubBlock>
 
-      <SubBlock label="Build mode · workflow dropdown open · select / create / delete">
+      <SubBlock label="Build mode · workflow dropdown open · select / create / rename / delete">
         <StageSplit
           leftFlex={1.2}
           left={(
@@ -658,10 +660,11 @@ function TopBarCard() {
           )}
           right={(
             <AnatomyLegend items={[
-              { label: "trigger", desc: "288px · loaded workflow name · mono 13px / 600 · caret rotates 180° · border → accent when open" },
-              { label: "panel header", desc: "'switch workflow · N' caps · 'new' secondary+plus button to create a workflow" },
+              { label: "trigger", desc: "288px · loaded workflow name · mono 13px / 600 · caret rotates 180° · pencil split-button renames the loaded workflow without opening" },
+              { label: "panel header", desc: "'switch workflow · N' caps · 'new' creates a workflow and drops it into rename" },
               { label: "workflow row", desc: "name + 'N runs · last …' · bg-3 when active · running pip + count at right" },
-              { label: "delete", desc: "per-row trash button on hover (bg-3 + border-1) — no swipe in the dropdown" },
+              { label: "row actions", desc: "rename (pencil) + delete (trash) · 30px targets · hover-fade on mouse, always lit on touch · no swipe" },
+              { label: "rename editor", desc: "inline input + ✓/✕ · sanitizes to lower-kebab · blocks empty + duplicate · Enter/✓ commit, Esc/✕ revert, blur commits-if-valid" },
               { label: "dismiss", desc: "click-away or Esc · co-reveal-down 180ms ease-out · maxHeight 340 then scrolls" },
             ]} />
           )}
