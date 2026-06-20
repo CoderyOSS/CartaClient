@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/tokens.dart';
@@ -23,18 +25,21 @@ class TopBar extends ConsumerWidget {
         (mode == AppMode.active && job != null) ||
         (mode == AppMode.history && job != null);
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 56),
-      padding: isJobView
-          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
-          : const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: AppColors.bg1.withValues(alpha: 0.92),
-        border: Border(
-          bottom: BorderSide(color: AppColors.border1, width: 1),
-        ),
-      ),
-      child: Align(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: isJobView
+              ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+              : const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: AppColors.bg1.withValues(alpha: 0.92),
+            border: Border(
+              bottom: BorderSide(color: AppColors.border1, width: 1),
+            ),
+          ),
+          child: Align(
         alignment: Alignment.centerLeft,
         child: Builder(
           builder: (context) {
@@ -61,6 +66,8 @@ class TopBar extends ConsumerWidget {
             }
           },
         ),
+      ),
+      ),
       ),
     );
   }
