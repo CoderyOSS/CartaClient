@@ -27,6 +27,7 @@ const ROUTING_H = 32;
 
 const STAGE_TYPES = [
   { kind: "worker", label: "worker", icon: "zap", desc: "skills · prompt · result" },
+  { kind: "gate",   label: "human gate", icon: "messageSquare", desc: "ask a person · reply routes the branch" },
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ function edgeMidpoint(d) {
 
 function OutputHandle({ stage, pos, isHovered, isSelected, flow, zoom, onAdd }) {
   const horizontal = flow !== "vertical";
-  const isRouting = stage.kind !== "worker" && stage.kind !== "map";
+  const isRouting = stage.kind !== "worker" && stage.kind !== "map" && stage.kind !== "gate";
   const w = isRouting ? ROUTING_W : NODE_W;
   const h = isRouting ? ROUTING_H : NODE_H;
   const cx = pos.x + (NODE_W / 2);
@@ -249,10 +250,10 @@ function OperatorPicker({ anchor, context, onClose }) {
             >
               <span style={{
                 width: 22, height: 22, borderRadius: 5,
-                background: t.kind === "worker" ? "color-mix(in oklab, var(--co-accent) 14%, var(--co-bg-3))" : "var(--co-bg-3)",
+                background: (t.kind === "worker" || t.kind === "gate") ? "color-mix(in oklab, var(--co-accent) 14%, var(--co-bg-3))" : "var(--co-bg-3)",
                 border: "1px solid var(--co-border-2)",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: t.kind === "worker" ? "var(--co-accent)" : "var(--co-fg-2)",
+                color: (t.kind === "worker" || t.kind === "gate") ? "var(--co-accent)" : "var(--co-fg-2)",
               }}>
                 <Icon name={t.icon} size={11} color="currentColor" />
               </span>
@@ -391,7 +392,7 @@ function BuilderOverlay({
         const srcStage = workflow.stages.find(st => st.id === edge.from);
         let srcAnchor = null;
         if (srcPos) {
-          const isRouting = srcStage && srcStage.kind !== "worker" && srcStage.kind !== "map";
+          const isRouting = srcStage && srcStage.kind !== "worker" && srcStage.kind !== "map" && srcStage.kind !== "gate";
           const w = isRouting ? ROUTING_W : NODE_W;
           const h = isRouting ? ROUTING_H : NODE_H;
           const cx = srcPos.x + (NODE_W / 2);

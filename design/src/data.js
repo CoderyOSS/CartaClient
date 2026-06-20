@@ -122,36 +122,6 @@ const WORKFLOW = {
     },
 
     {
-      // Map container. A single capsule that maps `body` over a list (`over`)
-      // at `concurrency`, then collects results back in at the output
-      // (`joinMode`). Replaces the standalone for-each operator, its per-item
-      // body worker, and the join with one node.
-      id: "commenter",
-      kind: "map",
-      label: "comment-files",
-      sub: "map · per file",
-      over: "ingest.files",
-      count: 7,
-      concurrency: 8,
-      joinMode: "all",
-      body: {
-        label: "comment-file",
-        sub: "per-file inline comment",
-        skills: ["code.review.inline"],
-        model: "haiku-4.5",
-        prompt:
-          "Write an inline comment for file `{{item}}` using\n" +
-          "{{full_review.comments}} as ground truth. Be terse.",
-        schema: {
-          type: "object",
-          properties: { path: "string", line: "integer", body: "string" },
-        },
-      },
-      pos: { x: 1180, y: 320 },
-      column: 4, lane: 0,
-    },
-
-    {
       id: "critic",
       kind: "worker",
       label: "critic",
@@ -160,7 +130,7 @@ const WORKFLOW = {
       model: "sonnet-4.5",
       prompt:
         "Read {{full_review.summary}} and the per-file comments\n" +
-        "{{commenter.results}}. Is the review specific, kind, and actionable?\n" +
+        "{{full_review.comments}}. Is the review specific, kind, and actionable?\n" +
         "Score 1-5. If <4, request a redo with notes.",
       schema: {
         type: "object",
@@ -170,8 +140,33 @@ const WORKFLOW = {
           accept: { type: "boolean" },
         },
       },
-      pos: { x: 1620, y: 320 },
-      column: 6, lane: 0,
+      pos: { x: 1180, y: 320 },
+      column: 4, lane: 0,
+    },
+
+    {
+      // Human-in-the-loop gate. Pauses the run and messages a person through a
+      // chat app (slack / telegram / sms / signal) with the context + a set of
+      // reply options. Their reply picks the branch — so this is a router with
+      // outputs, like `branch`, but the decision comes from a human, not a model.
+      id: "human_gate",
+      kind: "gate",
+      label: "ship-approval",
+      sub: "ask a reviewer",
+      icon: "messageSquare",       // human-in-the-loop: distinct glyph, same golden role-tile as a worker
+      channel: "slack",            // slack | telegram | sms | signal
+      target: "#pr-reviews",
+      timeout: "30m",
+      onTimeout: "send back",       // default reply if nobody answers in time
+      prompt:
+        "PR #{{inputs.pr_number}} in {{inputs.repo}} scored {{critic.score}}/5.\n" +
+        "{{full_review.comments}} review comments are staged. Post them, or send it back?",
+      options: [
+        { id: "ship",      label: "post it",      tone: "success" },
+        { id: "send_back", label: "send back",    tone: "warning" },
+      ],
+      pos: { x: 1460, y: 320 },
+      column: 5, lane: 0,
     },
 
     {
@@ -181,14 +176,14 @@ const WORKFLOW = {
       sub: "github.comment",
       skills: ["github.comment", "github.label"],
       prompt:
-        "Post the comments from {{commenter.results}} to {{inputs.repo}}#{{inputs.pr_number}}.\n" +
+        "Post the comments from {{full_review.comments}} to {{inputs.repo}}#{{inputs.pr_number}}.\n" +
         "Add label `triaged:{{classify.risk}}`.",
       schema: {
         type: "object",
         properties: { posted: { type: "integer" } },
       },
-      pos: { x: 1860, y: 320 },
-      column: 7, lane: 0,
+      pos: { x: 1740, y: 320 },
+      column: 6, lane: 0,
     },
   ],
   edges: [
@@ -196,12 +191,12 @@ const WORKFLOW = {
     { from: "classify",      to: "quick_review",  case: "low" },
     { from: "classify",      to: "full_review",   case: "med · high" },
     { from: "classify",      to: "security_scan", case: "high" },
-    { from: "full_review",   to: "commenter"    },
+    { from: "full_review",   to: "critic"       },
     { from: "quick_review",  to: "critic"       },
-    { from: "commenter",     to: "critic"       },
     { from: "security_scan", to: "critic"       },
-    { from: "critic",        to: "post",          case: "ship" },
-    { from: "critic",        to: "full_review",   case: "redo", loop: true },
+    { from: "critic",        to: "human_gate"     },
+    { from: "human_gate",    to: "post",          case: "post it" },
+    { from: "human_gate",    to: "full_review",   case: "send back", loop: true },
   ],
 };
 
@@ -227,8 +222,8 @@ const JOB = {
     quick_review:  { status: "skipped", durMs:    0, tokens:    0 },
     full_review:   { status: "running", durMs:    0, progress: 0.62, tokens: 38_400 },
     security_scan: { status: "running", durMs:    0, progress: 0.81, tokens: 14_900 },
-    commenter:     { status: "queued",  durMs:    0, tokens:    0, items: 7, done: 0 },
     critic:        { status: "queued",  durMs:    0, tokens:    0 },
+    human_gate:    { status: "queued",  durMs:    0, tokens:    0 },
     post:          { status: "queued",  durMs:    0, tokens:    0 },
   },
   // which edges have actually been traversed / are flowing tokens now
@@ -237,12 +232,12 @@ const JOB = {
     "classify→quick_review":   "skipped",
     "classify→full_review":    "active",
     "classify→security_scan":  "active",
-    "full_review→commenter":   "pending",
+    "full_review→critic":      "pending",
     "quick_review→critic":     "skipped",
-    "commenter→critic":        "pending",
     "security_scan→critic":    "pending",
-    "critic→post":             "pending",
-    "critic→full_review":      "pending",
+    "critic→human_gate":       "pending",
+    "human_gate→post":         "pending",
+    "human_gate→full_review":  "pending",
   },
 };
 
@@ -457,11 +452,8 @@ const STAGE_EXECUTIONS = {
     { id: "ex_quick_0", label: "execution", status: "skipped", startedAt: "+00:35", durMs: 0, tokens: 0, tools: [], skipReason: "route_risk chose [full_review, security_scan]" },
   ],
 
-  commenter: [
-    { id: "ex_map_q", label: "map · 0 / 7 items done", status: "queued", startedAt: "—", durMs: 0, tokens: 0, tools: [] },
-  ],
-
   critic:    [{ id: "ex_critic_q",    label: "execution", status: "queued", startedAt: "—", durMs: 0, tokens: 0, tools: [] }],
+  human_gate:[{ id: "ex_gate_q",      label: "awaiting reviewer", status: "queued", startedAt: "—", durMs: 0, tokens: 0, tools: [], waitsFor: ["critic"] }],
   post:      [{ id: "ex_post_q",      label: "execution", status: "queued", startedAt: "—", durMs: 0, tokens: 0, tools: [] }],
 };
 
@@ -494,7 +486,6 @@ const ATTACHED_CONFIGS = {
   ingest: [],
   post:   [],
   quick_review: [],
-  commenter: [],
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -561,6 +552,14 @@ function workflowToYaml(wf) {
       lines.push(`    concurrency: ${s.concurrency}`);
       lines.push(`    collect: ${s.joinMode}`);
       lines.push(`    body: ${s.body.label}`);
+    } else if (s.kind === "gate") {
+      lines.push(`    channel: ${s.channel}`);
+      lines.push(`    to: "${s.target}"`);
+      lines.push(`    timeout: ${s.timeout}`);
+      lines.push(`    on_timeout: ${s.onTimeout}`);
+      lines.push(`    ask: |`);
+      for (const ln of s.prompt.split("\n")) lines.push(`      ${ln}`);
+      lines.push(`    options: [${s.options.map(o => o.label).join(", ")}]`);
     } else if (s.kind === "join") {
       lines.push(`    waits_for: [${s.waits_for.join(", ")}]`);
       lines.push(`    mode: ${s.mode}`);
@@ -569,4 +568,13 @@ function workflowToYaml(wf) {
   return lines.join("\n");
 }
 
-Object.assign(window, { WORKFLOW, JOB, SNAPSHOTS, WORKFLOWS_LIST, JOBS_LOG, STAGE_EXECUTIONS, CONNECTIONS, ATTACHED_CONFIGS, workflowToYaml });
+// Messaging channels a human gate can reach a person through. Each is a
+// single "chat connection" token you'd configure once in settings.
+const GATE_CHANNELS = [
+  { id: "slack",    label: "slack",    hint: "#channel or @user" },
+  { id: "telegram", label: "telegram", hint: "bot chat id" },
+  { id: "sms",      label: "sms",      hint: "+1 phone number" },
+  { id: "signal",   label: "signal",   hint: "+1 phone number" },
+];
+
+Object.assign(window, { WORKFLOW, JOB, SNAPSHOTS, WORKFLOWS_LIST, JOBS_LOG, STAGE_EXECUTIONS, CONNECTIONS, ATTACHED_CONFIGS, GATE_CHANNELS, workflowToYaml });

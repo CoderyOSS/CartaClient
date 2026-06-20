@@ -19,6 +19,18 @@ import 'widgets/stage_drawer/stage_drawer.dart';
 import 'widgets/settings/settings_modal.dart';
 import 'providers/settings_provider.dart';
 
+final _stageDrawerKeys = <String, GlobalObjectKey>{};
+
+GlobalObjectKey _stageDrawerKey(String stageId, StageDrawerView view) {
+  final keyString = '${stageId}_${view.name}';
+  return _stageDrawerKeys.putIfAbsent(
+    keyString,
+    () => GlobalObjectKey(keyString),
+  );
+}
+
+const _yamlDrawerKey = GlobalObjectKey('yaml_drawer');
+
 void main() {
   runApp(const TrailheadApp());
 }
@@ -95,6 +107,8 @@ class TrailheadShell extends ConsumerWidget {
     Widget buildDrawerPanel() {
       if (!yamlOpen && !stageOpen) return const SizedBox.shrink();
 
+      final showStageDrawer = stageOpen && stageNode != null && mode != AppMode.history;
+
       if (isPortrait) {
         // Portrait: side-by-side in bottom panel
         return Row(
@@ -102,6 +116,7 @@ class TrailheadShell extends ConsumerWidget {
             if (yamlOpen)
               Expanded(
                 child: YamlDrawer(
+                  key: _yamlDrawerKey,
                   workflow: workflow,
                   onClose: () => ref
                       .read(yamlDrawerOpenProvider.notifier)
@@ -109,9 +124,10 @@ class TrailheadShell extends ConsumerWidget {
                   isPortrait: true,
                 ),
               ),
-            if (stageOpen && stageNode != null)
+            if (showStageDrawer)
               Expanded(
                 child: StageDrawer(
+                  key: _stageDrawerKey(stageNode.id, drawerView),
                   stage: stageNode,
                   view: drawerView,
                   onClose: () {
@@ -131,13 +147,15 @@ class TrailheadShell extends ConsumerWidget {
         children: [
           if (yamlOpen)
             YamlDrawer(
+              key: _yamlDrawerKey,
               workflow: workflow,
               onClose: () => ref
                   .read(yamlDrawerOpenProvider.notifier)
                   .state = false,
             ),
-          if (stageOpen && stageNode != null)
+          if (showStageDrawer)
             StageDrawer(
+              key: _stageDrawerKey(stageNode.id, drawerView),
               stage: stageNode,
               view: drawerView,
               onClose: () {

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/workflow_node.dart';
+import '../../providers/mode_provider.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
 import 'editor_settings_tab.dart';
@@ -11,7 +13,7 @@ import 'job_log_view.dart';
 
 enum StageDrawerView { builder, job }
 
-class StageDrawer extends StatefulWidget {
+class StageDrawer extends ConsumerStatefulWidget {
   final WorkflowNode stage;
   final StageDrawerView view;
   final VoidCallback onClose;
@@ -26,22 +28,50 @@ class StageDrawer extends StatefulWidget {
   });
 
   @override
-  State<StageDrawer> createState() => _StageDrawerState();
+  ConsumerState<StageDrawer> createState() => _StageDrawerState();
 }
 
-class _StageDrawerState extends State<StageDrawer> {
-  String _tab = 'settings';
+class _StageDrawerState extends ConsumerState<StageDrawer> {
+  late TextEditingController _labelCtrl;
+
+  String get _tabKey => '${widget.stage.id}_${widget.view.name}';
+
+  @override
+  void initState() {
+    super.initState();
+    _labelCtrl = TextEditingController(text: widget.stage.label);
+  }
 
   @override
   void didUpdateWidget(covariant StageDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.stage.id != widget.stage.id) {
-      _tab = 'settings';
+      _labelCtrl.text = widget.stage.label;
     }
   }
 
   @override
+  void dispose() {
+    _labelCtrl.dispose();
+    super.dispose();
+  }
+
+  void _updateLabel(String value) {
+    final wf = ref.read(workflowProvider);
+    ref.read(workflowProvider.notifier).state = wf.copyWith(
+      nodes: wf.nodes.map((n) {
+        if (n.id == widget.stage.id) {
+          return n.copyWith(label: value);
+        }
+        return n;
+      }).toList(),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final tabsMap = ref.watch(stageDrawerTabProvider);
+    final _tab = tabsMap[_tabKey] ?? 'settings';
     final meta = widget.stage.kind == 'worker'
         ? 'worker stage'
         : widget.stage.kind == 'fan'
@@ -123,15 +153,20 @@ class _StageDrawerState extends State<StageDrawer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.stage.label,
+                      TextField(
+                        controller: _labelCtrl,
+                        onChanged: _updateLabel,
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: AppColors.fg0,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          border: InputBorder.none,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -234,9 +269,15 @@ class _StageDrawerState extends State<StageDrawer> {
   }
 
   Widget _buildTab(_Tab t) {
-    final active = _tab == t.value;
+    final tabsMap = ref.watch(stageDrawerTabProvider);
+    final tab = tabsMap[_tabKey] ?? 'settings';
+    final active = tab == t.value;
     return GestureDetector(
-      onTap: () => setState(() => _tab = t.value),
+      onTap: () {
+        final next = Map<String, String>.from(tabsMap);
+        next[_tabKey] = t.value;
+        ref.read(stageDrawerTabProvider.notifier).state = next;
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(

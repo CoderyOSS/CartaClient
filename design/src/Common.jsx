@@ -103,6 +103,9 @@ const ICONS = {
   mousePointer:'path:M3 3l7.07 16.97 2.51-7.39 7.39-2.51z',
   send:     'line:22,2,11,13|polygon:22,2,15,22,11,13,2,9,22,2',
   plug:     'path:M12 22v-5|path:M9 8V2|path:M15 8V2|path:M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z',
+  // human-in-the-loop gate — chat bubble (messaging a person for a decision)
+  messageSquare: 'path:M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  userCheck: 'path:M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2|circle:9,7,4|polyline:16,11,18,13,22,9',
 };
 
 function Icon({ name, size = 16, color = "currentColor", strokeWidth = 1.5, style }) {

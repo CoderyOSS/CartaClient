@@ -100,15 +100,10 @@ function App() {
   const stageStatus = stage && currentJob ? JOB.stageStatus[stage.id] : null;
 
   // ── Sidebar selection ──────────────────────────────────────────────────
-  let sidebar;
-  if (mode === "build") {
-    sidebar = (
-      <WorkflowsSidebar
-        activeId={activeWfId}
-        onPick={(id) => { setActiveWfId(id); setBuildSel(null); }}
-      />
-    );
-  } else if (mode === "active") {
+  // Build mode has no sidebar — the workflow selector lives in the header
+  // (see TopBar's WorkflowSelect). Active/history keep their job navigators.
+  let sidebar = null;
+  if (mode === "active") {
     sidebar = (
       <JobsSidebar
         kind="active"
@@ -238,6 +233,9 @@ function App() {
         <TopBar
           mode={mode}
           workflow={WORKFLOW}
+          workflows={WORKFLOWS_LIST}
+          activeWfId={activeWfId}
+          onPickWorkflow={(id) => { setActiveWfId(id); setBuildSel(null); }}
           job={currentJob}
           jobState={mode === "history" && currentJob ? currentJob.status : jobState}
           onPlay={() => setJobState("running")}

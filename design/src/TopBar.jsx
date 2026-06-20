@@ -1,5 +1,5 @@
-/* global React, Icon, IconButton, Button, StatusDot, StatusTag, Tag */
-const { useState: useStateTB } = React;
+/* global React, Icon, IconButton, Button, StatusDot, StatusTag, Tag, WORKFLOWS_LIST */
+const { useState: useStateTB, useRef: useRefTB, useEffect: useEffectTB } = React;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Top bar — adapts to the active mode. The mode rail (on the far left)
@@ -93,42 +93,193 @@ function ModeBadge({ mode }) {
   );
 }
 
-function BuildBar({ workflow, onYaml, yamlActive }) {
+// ──────────────────────────────────────────────────────────────────────────
+// Workflow selector — the build-mode header dropdown that replaces the old
+// left sidebar. The trigger shows the loaded workflow (name + version +
+// draft); the panel lists every workflow with its run stats and live-job
+// pip, plus "new workflow" and per-row delete — everything the sidebar did.
+// ──────────────────────────────────────────────────────────────────────────
+
+function WorkflowMenuRow({ wf, active, onPick, onDelete }) {
+  const [hover, setHover] = useStateTB(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ position: "relative", display: "flex", alignItems: "center" }}
+    >
+      <button
+        type="button"
+        onClick={() => onPick(wf.id)}
+        style={{
+          flex: 1,
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 8px",
+          background: active ? "var(--co-bg-3)" : hover ? "var(--co-bg-2)" : "transparent",
+          border: "none",
+          borderRadius: 4,
+          textAlign: "left",
+          cursor: "pointer",
+          fontFamily: "var(--co-font-mono)",
+          transition: "background 140ms var(--co-ease-out)",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontFamily: "var(--co-font-mono)", fontSize: 11.5,
+            color: active ? "var(--co-text-strong)" : "var(--co-text)",
+            fontWeight: active ? 600 : 500,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{wf.name}</div>
+          <div style={{
+            fontFamily: "var(--co-font-mono)", fontSize: 9.5,
+            color: "var(--co-text-subtle)", marginTop: 1,
+          }}>
+            {wf.runs.toLocaleString()} runs · last {wf.last}
+          </div>
+        </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
+          {wf.active > 0 && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontFamily: "var(--co-font-mono)", fontSize: 10,
+              color: "var(--co-accent)",
+            }}>
+              <StatusDot status="running" pulse size={5} />
+              {wf.active}
+            </span>
+          )}
+        </span>
+      </button>
+      {hover && (
+        <button
+          type="button"
+          title="delete workflow"
+          onClick={(e) => { e.stopPropagation(); onDelete(wf.id); }}
+          style={{
+            position: "absolute", right: 8,
+            width: 24, height: 24, borderRadius: 6,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            background: "var(--co-bg-3)", border: "1px solid var(--co-border-1)",
+            color: "var(--co-text-subtle)", cursor: "pointer",
+          }}
+        >
+          <Icon name="trash" size={12} color="currentColor" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function WorkflowSelect({ workflow, workflows, activeWfId, onPickWorkflow, defaultOpen }) {
+  const [open, setOpen] = useStateTB(!!defaultOpen);
+  const [hidden, setHidden] = useStateTB(() => new Set());
+  const ref = useRefTB(null);
+
+  useEffectTB(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const list = (workflows || []).filter(wf => !hidden.has(wf.id));
+  const removeWf = (id) => setHidden(h => { const n = new Set(h); n.add(id); return n; });
+  const pick = (id) => { onPickWorkflow(id); setOpen(false); };
+
+  return (
+    <div ref={ref} style={{ position: "relative", flex: "0 0 auto", width: 288 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 9,
+          width: "100%",
+          padding: "8px 10px",
+          background: "var(--co-bg-1)",
+          border: "1px solid", borderColor: open ? "var(--co-accent)" : "var(--co-border-2)",
+          borderRadius: 8,
+          cursor: "pointer", minWidth: 0,
+          transition: "border-color 140ms var(--co-ease-out)",
+        }}
+      >
+        <span style={{
+          flex: 1, minWidth: 0,
+          fontFamily: "var(--co-font-mono)", fontSize: 13, fontWeight: 600,
+          color: "var(--co-text)",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          textAlign: "left",
+        }}>{workflow.name}</span>
+        <span style={{
+          flex: "0 0 auto",
+          width: 0, height: 0,
+          borderLeft: "4px solid transparent",
+          borderRight: "4px solid transparent",
+          borderTop: "4px solid var(--co-text-muted)",
+          transform: open ? "rotate(180deg)" : "rotate(0)",
+          transition: "transform 160ms var(--co-ease-out)",
+        }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
+          background: "var(--co-bg-2)",
+          border: "1px solid var(--co-border-2)",
+          borderRadius: 8,
+          boxShadow: "var(--co-shadow-2)",
+          padding: 4,
+          zIndex: 60,
+          overflow: "hidden",
+          transformOrigin: "top",
+          animation: "co-reveal-down 180ms var(--co-ease-out)",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "6px 6px 8px", borderBottom: "1px solid var(--co-border-1)", marginBottom: 4,
+          }}>
+            <span style={{
+              fontFamily: "var(--co-font-mono)", fontSize: 9.5,
+              letterSpacing: "0.08em", textTransform: "uppercase",
+              color: "var(--co-text-subtle)", fontWeight: 500,
+            }}>switch workflow · {list.length}</span>
+            <Button variant="secondary" size="sm" icon="plus">new</Button>
+          </div>
+          <div style={{ maxHeight: 340, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
+            {list.map(wf => (
+              <WorkflowMenuRow
+                key={wf.id}
+                wf={wf}
+                active={wf.id === activeWfId}
+                onPick={pick}
+                onDelete={removeWf}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BuildBar({ workflow, workflows, activeWfId, onPickWorkflow, onYaml, yamlActive }) {
   return (
     <div style={{
       flex: 1,
       display: "flex", alignItems: "center", gap: 12,
       minWidth: 0,
     }}>
-      <ModeBadge mode="build" />
-      <div style={{ display: "flex", alignItems: "center", gap: 9, flex: "0 1 auto", minWidth: 0 }}>
-        <div style={{
-          width: 26, height: 26, borderRadius: 6,
-          background: "var(--co-grad-trail)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "var(--co-font-mono)", fontSize: 11, color: "#fbf3e6", fontWeight: 700,
-          flex: "0 0 26px",
-        }}>wf</div>
-        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{
-              fontFamily: "var(--co-font-display)", fontSize: 15, fontWeight: 600,
-              color: "var(--co-text-strong)", letterSpacing: "-0.01em",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>{workflow.name}</span>
-            <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10, color: "var(--co-text-subtle)", flex: "0 0 auto" }}>v{workflow.version}</span>
-            {workflow.draft && workflow.draft !== workflow.version && (
-              <span style={{
-                fontFamily: "var(--co-font-mono)", fontSize: 9.5, color: "var(--co-warning)",
-                background: "var(--co-warning-soft)", padding: "1px 5px", borderRadius: 3, flex: "0 0 auto",
-              }}>draft v{workflow.draft}</span>
-            )}
-          </div>
-          <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10, color: "var(--co-text-subtle)" }}>
-            {workflow.updated}
-          </span>
-        </div>
-      </div>
+      <WorkflowSelect
+        workflow={workflow}
+        workflows={workflows}
+        activeWfId={activeWfId}
+        onPickWorkflow={onPickWorkflow}
+      />
 
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
         <Button variant="ghost" size="sm" icon="copy">duplicate</Button>
@@ -145,7 +296,6 @@ function JobBar({ job, mode, jobState, onPlay, onPause, onStop, onRestart, onSna
   if (!job) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
-        <ModeBadge mode={mode} />
         <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 12, color: "var(--co-text-subtle)" }}>
           {mode === "active" ? "select a running job from the sidebar" : "select a past job — or browse the table"}
         </span>
@@ -172,7 +322,6 @@ function JobBar({ job, mode, jobState, onPlay, onPause, onStop, onRestart, onSna
     }}>
       {/* Row 1 — identity + status + actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <ModeBadge mode={mode} />
 
         <button type="button" onClick={onClear} title="back to list"
           style={{
@@ -264,7 +413,6 @@ function JobBar({ job, mode, jobState, onPlay, onPause, onStop, onRestart, onSna
 function HistoryListBar({ count }) {
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
-      <ModeBadge mode="history" />
       <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
         <span style={{
           fontFamily: "var(--co-font-display)", fontSize: 15, fontWeight: 600,
@@ -284,7 +432,7 @@ function HistoryListBar({ count }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function TopBar({
-  mode, workflow, job, jobState,
+  mode, workflow, workflows, activeWfId, onPickWorkflow, job, jobState,
   onPlay, onPause, onStop, onRestart, onSnapshot, onClearJob,
   historyCount, onYaml, yamlActive,
 }) {
@@ -304,7 +452,7 @@ function TopBar({
       position: "relative",
       zIndex: 30,
     }}>
-      {mode === "build" && <BuildBar workflow={workflow} onYaml={onYaml} yamlActive={yamlActive} />}
+      {mode === "build" && <BuildBar workflow={workflow} workflows={workflows} activeWfId={activeWfId} onPickWorkflow={onPickWorkflow} onYaml={onYaml} yamlActive={yamlActive} />}
       {mode === "active" && (
         <JobBar
           job={job} mode="active" jobState={jobState}
@@ -324,4 +472,4 @@ function TopBar({
   );
 }
 
-Object.assign(window, { TopBar });
+Object.assign(window, { TopBar, WorkflowSelect });

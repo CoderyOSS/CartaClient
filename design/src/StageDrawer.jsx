@@ -356,7 +356,67 @@ function EditorSettingsTab({ stage }) {
           </Field>
         </>
       )}
+
+      {stage.kind === "gate" && <GateSettings stage={stage} />}
     </div>
+  );
+}
+
+// Human-in-the-loop gate editor — which messaging channel, who to ask, how
+// long to wait, and the reply → branch routing table.
+function GateSettings({ stage }) {
+  const channels = (typeof GATE_CHANNELS !== "undefined") ? GATE_CHANNELS : [{ id: stage.channel, label: stage.channel, hint: "" }];
+  const [channel, setChannel] = useStateSD(stage.channel);
+  const chMeta = channels.find(c => c.id === channel) || channels[0];
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label="channel" hint="messaging app">
+          <select value={channel} onChange={e => setChannel(e.target.value)} style={{
+            width: "100%", padding: "8px 10px",
+            fontFamily: "var(--co-font-mono)", fontSize: 12,
+            background: "var(--co-bg-1)", border: "1px solid var(--co-border-2)",
+            borderRadius: 8, color: "var(--co-text)", appearance: "none", cursor: "pointer",
+            backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23c9aa84' d='M0 0h10L5 6z'/></svg>")`,
+            backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+          }}>
+            {channels.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </Field>
+        <Field label="send to" hint={chMeta.hint}>
+          <input defaultValue={stage.target} style={inputStyle} />
+        </Field>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label="wait timeout" hint="how long to hold">
+          <input defaultValue={stage.timeout} style={inputStyle} />
+        </Field>
+        <Field label="on timeout" hint="if nobody replies">
+          <SelectField defaultValue={stage.onTimeout} options={stage.options.map(o => ({ v: o.label, l: o.label }))} />
+        </Field>
+      </div>
+
+      <Field label="replies → branches" hint={`${stage.options.length} outputs`}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {stage.options.map((o, i) => (
+            <div key={i} style={{ ...routingRowStyle, gridTemplateColumns: "14px 1fr auto" }}>
+              <span style={{ width: 9, height: 9, borderRadius: 999, background: `var(--co-${o.tone || "info"})` }} />
+              <span style={routingMatchStyle}>{o.label}</span>
+              <span style={routingArrowStyle}>reply {i + 1} → branch</span>
+            </div>
+          ))}
+          <button type="button" style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4,
+            padding: "5px 8px", background: "transparent", color: "var(--co-text-muted)",
+            border: "1px dashed var(--co-border-2)", borderRadius: 4, cursor: "pointer",
+            fontFamily: "var(--co-font-mono)", fontSize: 11,
+          }}>
+            <Icon name="plus" size={10} /> add reply
+          </button>
+        </div>
+      </Field>
+    </>
   );
 }
 
@@ -479,6 +539,74 @@ function EditorPromptTab({ stage }) {
   );
 }
 const inlineCodeStyle = { fontFamily: "var(--co-font-mono)", color: "var(--co-accent)" };
+
+// Gate "message" tab — the outgoing template plus a live preview of how the
+// message + reply buttons land in the chosen chat app.
+function GateMessageTab({ stage }) {
+  const channels = (typeof GATE_CHANNELS !== "undefined") ? GATE_CHANNELS : [{ id: stage.channel, label: stage.channel }];
+  const ch = channels.find(c => c.id === stage.channel) || { label: stage.channel };
+  const refs = [...new Set([...stage.prompt.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim()))];
+  const sample = {
+    "inputs.pr_number": "1428", "inputs.repo": "acme/ledger",
+    "critic.score": "4", "commenter.results": "7",
+  };
+  const rendered = stage.prompt.replace(/\{\{([^}]+)\}\}/g, (m, k) => sample[k.trim()] ?? m);
+  return (
+    <div style={{ padding: 16 }}>
+      <Field label="message template" hint={`${refs.length} dynamic refs`}>
+        <PromptTokens value={stage.prompt} />
+      </Field>
+
+      <Field label={`preview · ${ch.label}`} hint="what the human receives">
+        <div style={{
+          background: "var(--co-bg-0)", border: "1px solid var(--co-border-2)",
+          borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          {/* sender */}
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{
+              width: 22, height: 22, borderRadius: 6,
+              background: "var(--co-grad-crust)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}><Icon name="messageSquare" size={12} color="var(--co-accent-ink)" /></span>
+            <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 11.5, color: "var(--co-text-strong)", fontWeight: 600 }}>trailhead-bot</span>
+            <span style={{ fontFamily: "var(--co-font-mono)", fontSize: 10, color: "var(--co-text-subtle)" }}>→ {stage.target}</span>
+          </div>
+          {/* message bubble */}
+          <div style={{
+            background: "var(--co-bg-3)",
+            border: "1px solid var(--co-border-2)",
+            borderRadius: "4px 12px 12px 12px", padding: "9px 11px",
+            fontFamily: "var(--co-font-sans)", fontSize: 12.5, lineHeight: 1.5,
+            color: "var(--co-text)", whiteSpace: "pre-wrap",
+          }}>{rendered}</div>
+          {/* reply buttons — as the human taps them in-app */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {stage.options.map(o => {
+              const tone = `var(--co-${o.tone || "info"})`;
+              return (
+                <span key={o.id} style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  height: 28, padding: "0 12px", borderRadius: 8,
+                  background: `color-mix(in oklab, ${tone} 16%, var(--co-bg-2))`,
+                  border: `1px solid color-mix(in oklab, ${tone} 45%, transparent)`,
+                  color: tone, fontFamily: "var(--co-font-sans)", fontSize: 12, fontWeight: 600,
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: tone }} />
+                  {o.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </Field>
+
+      <Field label="if no reply" hint="timeout fallback">
+        <div style={{ ...preStyle, color: "var(--co-text)" }}>waits {stage.timeout} · then takes “{stage.onTimeout}”</div>
+      </Field>
+    </div>
+  );
+}
 
 function EditorResultTab({ stage }) {
   const [format, setFormat] = useStateSD(stage.resultFormat || "json");
@@ -836,6 +964,29 @@ function JobStageHeaderInfo({ stage }) {
         {stage.kind === "branch" && <Field label="cond"><div style={preStyle}>{stage.cond}</div></Field>}
         {stage.kind === "map"    && <Field label="over"><div style={preStyle}>{stage.over}</div></Field>}
         {stage.kind === "join"   && <Field label="waits for"><div style={preStyle}>{stage.waits_for.join(", ")}</div></Field>}
+        {stage.kind === "gate"   && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="channel"><div style={preStyle}>{stage.channel}</div></Field>
+              <Field label="send to"><div style={preStyle}>{stage.target}</div></Field>
+            </div>
+            <Field label="replies" hint={`${stage.options.length} branches`}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {stage.options.map(o => (
+                  <span key={o.id} style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    fontFamily: "var(--co-font-mono)", fontSize: 11, padding: "2px 8px",
+                    background: "var(--co-bg-2)", border: "1px solid var(--co-border-1)",
+                    borderRadius: 999, color: "var(--co-text-muted)",
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: `var(--co-${o.tone || "info"})` }} />
+                    {o.label}
+                  </span>
+                ))}
+              </div>
+            </Field>
+          </>
+        )}
       </div>
     );
   }
@@ -951,6 +1102,7 @@ function StageDrawer({ stage, status, onClose, view }) {
     stage.kind === "branch" ? "branch — if/else router" :
     stage.kind === "map"    ? "map — iterate over a list" :
     stage.kind === "join"   ? "join — wait for upstreams" :
+    stage.kind === "gate"   ? "gate — human-in-the-loop" :
     "routing operator";
 
   const isBuilder = view === "builder";
@@ -964,6 +1116,11 @@ function StageDrawer({ stage, status, onClose, view }) {
     : stage.kind === "map"
     ? [
         { value: "settings", label: "container" },
+      ]
+    : stage.kind === "gate"
+    ? [
+        { value: "settings", label: "gate" },
+        { value: "message",  label: "message" },
       ]
     : [
         { value: "settings", label: "routing" },
@@ -985,12 +1142,13 @@ function StageDrawer({ stage, status, onClose, view }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             width: 28, height: 28, borderRadius: 6,
-            background: (stage.kind === "worker" || stage.kind === "map") ? "var(--co-grad-crust)" : "var(--co-bg-3)",
-            border: (stage.kind === "worker" || stage.kind === "map") ? "none" : "1px solid var(--co-border-3)",
+            background: (stage.kind === "worker" || stage.kind === "map" || stage.kind === "gate") ? "var(--co-grad-crust)"
+              : "var(--co-bg-3)",
+            border: (stage.kind === "worker" || stage.kind === "map" || stage.kind === "gate") ? "none" : "1px solid var(--co-border-3)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <Icon name={stage.kind === "worker" ? "zap" : stage.kind === "map" ? "forEach" : "gitBranch"} size={14}
-                  color={(stage.kind === "worker" || stage.kind === "map") ? "var(--co-accent-ink)" : "var(--co-accent)"} />
+            <Icon name={stage.kind === "worker" ? "zap" : stage.kind === "map" ? "forEach" : stage.kind === "gate" ? "messageSquare" : "gitBranch"} size={14}
+                  color={(stage.kind === "worker" || stage.kind === "map" || stage.kind === "gate") ? "var(--co-accent-ink)" : "var(--co-accent)"} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, lineHeight: 1.2 }}>
@@ -1017,6 +1175,7 @@ function StageDrawer({ stage, status, onClose, view }) {
           <div style={{ flex: 1, overflowY: "auto" }}>
             {tab === "settings" && <EditorSettingsTab stage={stage} />}
             {tab === "prompt"   && <EditorPromptTab   stage={stage} />}
+            {tab === "message"  && <GateMessageTab    stage={stage} />}
             {tab === "result"   && <EditorResultTab   stage={stage} />}
           </div>
           <div style={{

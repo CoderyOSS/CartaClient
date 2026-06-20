@@ -132,7 +132,7 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
       }
 
       buf.writeln('    pos: {x: ${node.x.toStringAsFixed(0)}, y: ${node.y.toStringAsFixed(0)}}');
-      final endLine = buf.toString().split('\n').length;
+      final endLine = buf.toString().split('\n').length - 1;
       stageLines[node.id] = (start: startLine, end: endLine);
     }
     buf.writeln('');

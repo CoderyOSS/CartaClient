@@ -177,6 +177,47 @@ function HNBranchTree({ status, selected }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  GATE — human-in-the-loop. NOT a bespoke style: it is the worker capsule
+//  (shared golden role-tile) with a distinct glyph (messageSquare), and it
+//  fans one output port per reply — so it reads as a worker that routes like a
+//  branch. A person, not a model, is the decider; the icon is the only tell.
+// ══════════════════════════════════════════════════════════════════════════
+const HN_GATE_OPTS = [
+  { label: "post it" },
+  { label: "send back" },
+];
+
+function HNGate({ label = "ship-approval", icon = "messageSquare", options = HN_GATE_OPTS, status, selected, layout = "graph" }) {
+  const st = status && status.status;
+  const running = st === "running";
+  const tree = layout === "tree";
+  const n = options.length;
+  return (
+    <div style={{ position: "relative", width: 168, height: 36, marginBottom: tree ? 22 : 0 }}>
+      <div style={{ ...hnShell(selected, running), alignItems: "center" }}>
+        <span style={hnTile}><Icon name={icon} size={14} color="currentColor" /></span>
+        <span style={hnLabel}>{label}</span>
+      </div>
+      <HNStatusTag st={st} />
+      {/* input — one dot */}
+      <span style={selected ? (tree ? hnSelInV : hnSelInH) : (tree ? hnInV : hnInH)} />
+      {/* outputs — one per reply, fanning like a branch */}
+      {options.map((o, i) => {
+        const frac = (i + 0.5) / n;
+        if (tree) {
+          return <span key={i} style={selected
+            ? { ...HN_DOT_SEL, bottom: -6, left: `${frac * 100}%`, transform: "translateX(-50%)" }
+            : { ...HN_DOT, bottom: -4, left: `${frac * 100}%`, transform: "translateX(-50%)" }} />;
+        }
+        return <span key={i} style={selected
+          ? { ...HN_DOT_SEL, right: -6, top: `${frac * 100}%`, transform: "translateY(-50%)" }
+          : { ...HN_DOT, right: -4, top: `${frac * 100}%`, transform: "translateY(-50%)" }} />;
+      })}
+    </div>
+  );
+}
+
 // ── labelled specimen wrapper — caption under each node, on a dot-grid stage ─
 function HNSpec({ caption, children }) {
   return (
@@ -194,8 +235,9 @@ function HNFamilyRow({ layout }) {
       <HNSpec caption="worker"><HNWorker icon="bot" label="full-review" layout={layout} /></HNSpec>
       <HNSpec caption="branch"><Branch /></HNSpec>
       <HNSpec caption="map"><HNWorker icon="forEach" label="comment-file" layout={layout} /></HNSpec>
+      <HNSpec caption="gate · human-in-the-loop"><HNGate layout={layout} /></HNSpec>
     </div>
   );
 }
 
-Object.assign(window, { HNWorker, HNBranchGraph, HNBranchTree, HNSpec, HNFamilyRow, HN_CASES });
+Object.assign(window, { HNWorker, HNBranchGraph, HNBranchTree, HNGate, HNSpec, HNFamilyRow, HN_CASES, HN_GATE_OPTS });

@@ -37,6 +37,8 @@ final stageDrawerOpenProvider = StateProvider<bool>((ref) => false);
 
 final selectedStageIdProvider = StateProvider<String?>((ref) => null);
 
+final stageDrawerTabProvider = StateProvider<Map<String, String>>((ref) => {});
+
 final documentsProvider = StateProvider<Map<String, WorkflowDocument>>((ref) {
   return {
     for (final wf in mockWorkflows)

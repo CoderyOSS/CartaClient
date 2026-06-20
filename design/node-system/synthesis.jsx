@@ -1,10 +1,11 @@
-/* global React, Icon, NS_MONO, nsBigLabel, nsSubLabel, ChassisChip, Spec */
+/* global React, Icon, NS_MONO, Spec */
 // ──────────────────────────────────────────────────────────────────────────
-// Synthesis directions — built from round-1 feedback:
-//   · keep C's leading role-tile        (shared identity anchor)
-//   · keep D's consistent header strips  (role legible at a glance)
-//   · keep E's clean connector dots      (role read at the edges)
+// Chosen direction — F (role-tile + clean ports).
+//   · C's leading role-tile  (shared identity anchor)
+//   · E's clean connector dots (role read at the edges)
 //   · map has ONE output; parallelism is dynamic (×n, never a fixed count)
+// This is the single source of truth for the horizontal node family. Rejected
+// directions have been expunged so no stale node style can linger here.
 // ──────────────────────────────────────────────────────────────────────────
 
 const SY_MONO = "var(--co-font-mono)";
@@ -119,92 +120,4 @@ function FBranchNode() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  DIRECTION G — Header strip + clean ports   (D ⊕ E)
-//  Every node = a header strip over a body, plus clean ports.
-//  Map: ONE output + an ×n chip for its dynamic, runtime-set fan width.
-// ══════════════════════════════════════════════════════════════════════════
-function gHeader() {
-  // One neutral header for every role. Golden/crust is reserved for the
-  // selected state, so it never appears on a resting node — role reads from
-  // the icon + kind label, not the header color.
-  return { bg: "var(--co-bg-3)", fg: "var(--co-text-muted)" };
-}
-function GNode({ icon, role, kind, fork, stack, children }) {
-  const h = gHeader(role);
-  return (
-    <div style={{ position: "relative", width: 180, height: 72 }}>
-      <div style={{
-        position: "relative", zIndex: 2,
-        width: "100%", height: "100%", boxSizing: "border-box",
-        borderRadius: 12, overflow: "hidden",
-        background: "var(--co-bg-2)", border: "1px solid var(--co-border-2)",
-        boxShadow: "var(--co-shadow-1)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px", height: 24, background: h.bg, color: h.fg }}>
-          <Icon name={icon} size={12} color="currentColor" />
-          <span style={{ flex: 1, fontFamily: SY_MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{kind}</span>
-          {stack && <DynChip />}
-        </div>
-        <div style={{ padding: "8px 11px" }}>{children}</div>
-      </div>
-      <SyIn /><SyOut fork={fork} />
-    </div>
-  );
-}
-function DirG() {
-  return (
-    <>
-      <Spec caption="worker">
-        <GNode icon="zap" role="worker" kind="worker">
-          <div style={nsBigLabel}>full-review</div>
-          <div style={nsSubLabel}>sonnet-4.5</div>
-        </GNode>
-      </Spec>
-      <Spec caption="branch"><GBranchNode /></Spec>
-      <Spec caption="map">
-        <GNode icon="forEach" role="map" kind="map">
-          <div style={nsBigLabel}>comment-file</div>
-          <div style={nsSubLabel}>maps ingest.files</div>
-        </GNode>
-      </Spec>
-    </>
-  );
-}
-
-// G branch — header strip stays a pure label; the node grows tall and lists
-// each case as a labeled row in the BODY, with its output port aligned to the
-// row (never over the header).
-function GBranchNode() {
-  const h = gHeader("branch");
-  const headerH = 24, padTop = 9, padBot = 9, rowH = 26;
-  const H = headerH + padTop + BRANCH_CASES.length * rowH + padBot;
-  const portTop = (i) => headerH + padTop + i * rowH + rowH / 2;
-  return (
-    <div style={{ position: "relative", width: 116, height: H }}>
-      <div style={{
-        position: "relative", zIndex: 2,
-        width: "100%", height: "100%", boxSizing: "border-box",
-        borderRadius: 12, overflow: "hidden",
-        background: "var(--co-bg-2)", border: "1px solid var(--co-border-2)",
-        boxShadow: "var(--co-shadow-1)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 9px", height: headerH, background: h.bg, color: h.fg }}>
-          <Icon name="gitBranch" size={12} color="currentColor" />
-          <span style={{ flex: 1, fontFamily: SY_MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>branch</span>
-        </div>
-        <div style={{ padding: `${padTop}px 0`, display: "flex", flexDirection: "column" }}>
-          {BRANCH_CASES.map((c, i) => (
-            <div key={i} style={{ height: rowH, display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: 27 }}>
-              <span style={{ fontFamily: SY_MONO, fontSize: 12, fontWeight: c.muted ? 500 : 600, color: caseColor(c) }}>{c.case}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <SyIn />
-      {BRANCH_CASES.map((c, i) => <CasePort key={i} top={portTop(i)} />)}
-    </div>
-  );
-}
-
-Object.assign(window, { DirF, DirG });
+Object.assign(window, { DirF });

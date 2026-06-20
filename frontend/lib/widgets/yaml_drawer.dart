@@ -93,8 +93,14 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
     final search = _searchController.text.trim().toLowerCase();
     final selectedStageId = ref.watch(selectedStageIdProvider);
 
-    // Compute which lines belong to which stage
-    final stageLines = yamlResult.stageLines;
+    // Offset stage lines when job preface is present
+    final prefaceOffset = isJob
+        ? _jobPreface(widget.job!).split('\n').length + 1
+        : 0;
+    final stageLines = yamlResult.stageLines.map((k, v) => MapEntry(
+          k,
+          (start: v.start + prefaceOffset, end: v.end + prefaceOffset),
+        ));
 
     return Container(
       width: widget.isPortrait ? double.infinity : 460,

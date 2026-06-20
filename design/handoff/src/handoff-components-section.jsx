@@ -458,10 +458,10 @@ function SidebarsCard() {
   return (
     <Card
       title="Sidebars"
-      description="Two sidebar variants — Workflows (Build mode) and Jobs (Active + History modes). The Jobs sidebar is shared across both modes: Active shows live jobs (running/paused/queued/retrying) with a live badge in the footer; History shows completed jobs (passed/failed/cancelled) with a filter button and 'no search yet' footer. Both support grouped/flat view toggle. Every workflow + job row is swipe-left-to-delete (try it on the specimens below). Note: in History the sidebar is hidden until a run is selected — with no selection the runs table fills the width on its own, so the sidebar acts purely as a job-to-job navigator once you drill in."
+      description="The Jobs sidebar serves both Active and History modes (Build mode now uses the header workflow dropdown instead of a left sidebar — see the Top bar card). Active shows live jobs (running/paused/queued/retrying) with a live badge in the footer; History shows completed jobs (passed/failed/cancelled) with a filter button and 'no search yet' footer. Both support grouped/flat view toggle. Every job row is swipe-left-to-delete (try it on the specimens below). Note: in History the sidebar is hidden until a run is selected — with no selection the runs table fills the width on its own, so the sidebar acts purely as a job-to-job navigator once you drill in."
       dartImport="lib/widgets/sidebars/{workflows,jobs}_sidebar.dart"
     >
-      <SubBlock label="workflows sidebar · Build mode · 240px">
+      <SubBlock label="workflows sidebar · legacy · replaced by the build-mode header dropdown">
         <StageSplit
           leftFlex={1.2}
           left={(
@@ -471,6 +471,7 @@ function SidebarsCard() {
           )}
           right={(
             <AnatomyLegend items={[
+              { label: "superseded", desc: "build mode no longer mounts this sidebar — workflow select / create / delete now live in the Top bar dropdown" },
               { label: "title block", desc: "Workflows · subtitle 'edit plans · N total'" },
               { label: "new workflow", desc: "secondary button, full-width" },
               { label: "section header", desc: "mono caps 9.5px, 'all'" },
@@ -540,18 +541,56 @@ function SidebarsCard() {
         </Stage>
       </SubBlock>
 
-      <SubBlock label="swipe-left-to-delete · workflow rows + job rows (both views)">
+      <SubBlock label="workflow dropdown · select / create / delete · build-mode header">
         <StageSplit
           leftFlex={1.2}
           left={(
-            <Constrained width={240} height={300}>
-              <WorkflowsSidebar activeId="wf_pr_reviewer" onPick={() => {}} />
+            <Constrained width={300} height={430}>
+              <div style={{ paddingTop: 2 }}>
+                <WorkflowSelect
+                  workflow={WORKFLOW}
+                  workflows={WORKFLOWS_LIST}
+                  activeWfId="wf_pr_reviewer"
+                  onPickWorkflow={() => {}}
+                  defaultOpen
+                />
+              </div>
             </Constrained>
           )}
           right={(
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ fontFamily: "var(--co-font-mono)", fontSize: 11.5, color: "var(--co-text-muted)", lineHeight: 1.6 }}>
-                Drag any row left (mouse or touch). A red delete background with a trash glyph is revealed; release past <strong style={{ color: "var(--co-text-strong)" }}>40% of the row width</strong> to confirm — the row slides off, collapses its height, and is removed. Release short of the threshold and it springs back. A swipe never fires the row's tap/select.
+                Workflow selection, creation, and deletion moved out of the old left sidebar into a <strong style={{ color: "var(--co-text-strong)" }}>header dropdown</strong> in build mode. The trigger shows the loaded workflow; the open panel lists every workflow with run stats + a live-job pip, a <strong style={{ color: "var(--co-text-strong)" }}>new</strong> button to create one, and a per-row <strong style={{ color: "var(--co-text-strong)" }}>delete</strong> that appears on hover. Workflows are <em>not</em> swiped — swipe-left-to-delete now lives only on job rows (below).
+              </div>
+              <AnatomyLegend items={[
+                { label: "trigger", desc: "loaded workflow name · mono 13px / 600 · caret rotates 180° when open · border → accent while open" },
+                { label: "panel header", desc: "'switch workflow · N' caps label · 'new' secondary+plus button creates a workflow" },
+                { label: "workflow row", desc: "name + 'N runs · last …' subtitle · bg-3 fill when active · running pip + count on the right" },
+                { label: "delete", desc: "hover reveals a 24px trash button (bg-3 + 1px border-1) pinned at row right · removes that workflow · no swipe" },
+                { label: "dismiss", desc: "click-away (mousedown outside) or Esc closes · panel animates co-reveal-down 180ms ease-out" },
+                { label: "Flutter", desc: "MenuAnchor / PopupMenuButton anchored under the header trigger · custom item rows, trailing delete IconButton on hover" },
+              ]} />
+            </div>
+          )}
+        />
+      </SubBlock>
+
+      <SubBlock label="swipe-left-to-delete · job rows (Active + History sidebars)">
+        <StageSplit
+          leftFlex={1.2}
+          left={(
+            <Constrained width={260} height={300}>
+              <JobsSidebar
+                kind="active" jobs={JOBS_LOG}
+                viewMode="flat" onViewMode={() => {}}
+                activeId="r_8f2a91c" onPick={() => {}}
+              />
+            </Constrained>
+          )}
+          right={(
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontFamily: "var(--co-font-mono)", fontSize: 11.5, color: "var(--co-text-muted)", lineHeight: 1.6 }}>
+                Drag any job row left (mouse or touch). A red delete background with a trash glyph is revealed; release past <strong style={{ color: "var(--co-text-strong)" }}>40% of the row width</strong> to confirm — the row slides off, collapses its height, and is removed. Release short of the threshold and it springs back. A swipe never fires the row's tap/select.
               </div>
               <AnatomyLegend items={[
                 { label: "drag state", desc: "foreground row translates left only · opaque bg-1 covers the red until you move" },
@@ -592,17 +631,41 @@ function TopBarCard() {
   return (
     <Card
       title="Top bar"
-      description="Adapts to the active mode. Build shows workflow identity + save/launch. Active and History (with a selected job) show a two-row job header: identity + status + controls on row 1, input + elapsed/tokens/cost on row 2."
+      description="Adapts to the active mode. Build shows a workflow-selector dropdown (which replaced the old left sidebar) plus duplicate / YAML / save draft / launch actions. Active and History (with a selected job) show a two-row job header: identity + status + controls on row 1, input + elapsed/tokens/cost on row 2."
       dartImport="lib/widgets/top_bar/{build,job,history_list}_bar.dart"
     >
-      <SubBlock label="Build mode · workflow + save/launch">
+      <SubBlock label="Build mode · workflow dropdown + duplicate / YAML / save / launch">
         <Stage padding={0} height={56}>
           <Constrained width={1080} height={56}>
-            <TopBar mode="build" workflow={WORKFLOW} job={null} jobState="running"
+            <TopBar mode="build" workflow={WORKFLOW} workflows={WORKFLOWS_LIST} activeWfId="wf_pr_reviewer" onPickWorkflow={()=>{}}
+              job={null} jobState="running"
               onPlay={()=>{}} onPause={()=>{}} onStop={()=>{}} onRestart={()=>{}} onSnapshot={()=>{}}
-              onClearJob={()=>{}} historyCount={JOBS_LOG.length} />
+              onClearJob={()=>{}} onYaml={()=>{}} historyCount={JOBS_LOG.length} />
           </Constrained>
         </Stage>
+      </SubBlock>
+
+      <SubBlock label="Build mode · workflow dropdown open · select / create / delete">
+        <StageSplit
+          leftFlex={1.2}
+          left={(
+            <Constrained width={300} height={430}>
+              <div style={{ paddingTop: 2 }}>
+                <WorkflowSelect workflow={WORKFLOW} workflows={WORKFLOWS_LIST}
+                  activeWfId="wf_pr_reviewer" onPickWorkflow={()=>{}} defaultOpen />
+              </div>
+            </Constrained>
+          )}
+          right={(
+            <AnatomyLegend items={[
+              { label: "trigger", desc: "288px · loaded workflow name · mono 13px / 600 · caret rotates 180° · border → accent when open" },
+              { label: "panel header", desc: "'switch workflow · N' caps · 'new' secondary+plus button to create a workflow" },
+              { label: "workflow row", desc: "name + 'N runs · last …' · bg-3 when active · running pip + count at right" },
+              { label: "delete", desc: "per-row trash button on hover (bg-3 + border-1) — no swipe in the dropdown" },
+              { label: "dismiss", desc: "click-away or Esc · co-reveal-down 180ms ease-out · maxHeight 340 then scrolls" },
+            ]} />
+          )}
+        />
       </SubBlock>
 
       <SubBlock label="Active mode · two-row job header · live controls">
@@ -644,6 +707,8 @@ function TopBarCard() {
           { name: "minHeight",  value: "CompTopBar.minHeight · 56" },
           { name: "bg",         value: "color-mix(palette.appShell 92%, transparent) · backdrop-blur" },
           { name: "border",     value: "bottom: 1px palette.divider" },
+          { name: "dropdown.trigger", value: "width 288 · bg1 · 1px border2 → accent when open · radius 8" },
+          { name: "dropdown.panel",   value: "bg2 · 1px border2 · shadow2 · maxHeight 340 scroll · co-reveal-down 180ms" },
           { name: "mode badge", value: "uppercase mono 9.5px · soft color background, full color text" },
           { name: "controls",   value: "play (primary accent gradient) · pause/stop/refresh/bookmark (ghost)" },
           { name: "stats row",  value: "AppType.mono · 11px · palette.textSubtle labels · palette.text values" },
@@ -1476,8 +1541,8 @@ function GraphNodesCard() {
   return (
     <Card
       title="Graph nodes"
-      description="Three node roles share one grammar (chosen Direction F from the node-system exploration). Every node is a single-line capsule led by a golden role-tile — the shared identity anchor — and wires through neutral connector dots on its edges. Worker runs a prompt; map runs that same body once per item of a list (single output, fan-out is dynamic at runtime); branch routes to one of N labeled cases and grows a labeled output port per case. Run status shows in the straddling top pill; a selected node gets the crisp accent ring. No node carries a colored left-edge rail."
-      dartImport="lib/widgets/canvas/worker_node.dart · map_node.dart · branch_node.dart"
+      description="Four node roles share one grammar (chosen Direction F from the node-system exploration). Every node is a single-line capsule led by a golden role-tile — the shared identity anchor — wiring through neutral connector dots on its edges. Worker runs a prompt; map runs that same body once per item of a list (single output, fan-out is dynamic at runtime); branch routes to one of N labeled cases and grows a labeled output port per case. The human gate is the same worker capsule with a distinct glyph (messageSquare) — it messages a person for a decision and fans one output port per reply, so it reads as a worker that routes like a branch; the icon is the only tell. Run status shows in the straddling top pill; a selected node gets the crisp accent ring. No node carries a colored left-edge rail."
+      dartImport="lib/widgets/canvas/worker_node.dart · map_node.dart · branch_node.dart (the gate reuses worker_node.dart with a glyph + multi-output)"
     >
       <SubBlock label="node family · graph layout · wires left → right">
         <Stage padding={28} bg="var(--co-bg-0)">
@@ -1522,6 +1587,36 @@ function GraphNodesCard() {
         />
       </SubBlock>
 
+      <SubBlock label="gate · human-in-the-loop · the worker capsule with a chat glyph + one output per reply">
+        <StatesGrid columns={4} items={[
+          { label: "default",                 children: <HNGate /> },
+          { label: "selected",                children: <HNGate selected /> },
+          { label: "running · awaiting reply",children: <HNGate status={{ status: "running" }} /> },
+          { label: "passed",                  children: <HNGate status={{ status: "passed" }} /> },
+          { label: "failed · timed out",      children: <HNGate status={{ status: "failed" }} /> },
+          { label: "3 replies",               children: <HNGate options={[{ label: "approve" }, { label: "changes" }, { label: "reject" }]} /> },
+        ]} />
+        <p style={{ margin: "12px 2px 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--co-text-subtle)" }}>
+          <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>A human, not a model, decides — same capsule, different glyph.</strong> The gate is <em>not</em> a bespoke node style: it is the worker capsule (same golden role-tile, grad-loaf body, neutral ports) carrying the <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>messageSquare</strong> glyph instead of bot. It messages a person — the channel (Slack / Telegram / SMS / …) is a stage setting, not a node treatment — and each reply is just an outgoing edge, so the gate <strong style={{ color: "var(--co-text-muted)", fontWeight: 600 }}>fans one output port per reply</strong> exactly like a branch. Run states match the worker verbatim: selected is the crisp accent ring, running is the soft accent glow + pill, and a timeout reads as a failed run.
+        </p>
+      </SubBlock>
+
+      <SubBlock label="anatomy · gate node">
+        <StageSplit
+          left={<div style={{ padding: "8px 0" }}><HNGate status={{ status: "running" }} /></div>}
+          right={(
+            <AnatomyLegend items={[
+              { label: "role tile",      desc: "the same 30px golden crust tile as every node — glyph in accent-ink, here messageSquare (the only thing distinguishing a gate from a worker)" },
+              { label: "label",          desc: "mono 13px · weight 600 · the decision being handed to the person (e.g. ship-approval)" },
+              { label: "input dot",      desc: "one neutral 8px connector on the leading edge — left in graph, top in tree" },
+              { label: "output dots",    desc: "one neutral dot per reply, fanning the trailing edge (right in graph, bottom in tree) — a worker that routes like a branch" },
+              { label: "selection / run",desc: "identical to the worker: accent ring when selected, soft accent glow + status pill when running — no separate gate colorway" },
+              { label: "status tag",     desc: "top-right straddling pill · running = awaiting reply · failed = timed out to the default reply" },
+            ]} />
+          )}
+        />
+      </SubBlock>
+
       <SubBlock label="tokens" last>
         <TokensList tokens={[
           { name: "capsule.size",     value: "168 × 36px · single-line body · rounded rectangle" },
@@ -1532,6 +1627,7 @@ function GraphNodesCard() {
           { name: "branch.graph",     value: "grows tall · one labeled case row + one output dot per case (right edge), aligned to its row" },
           { name: "branch.tree",      value: "stays 168px wide · output dot per case fans along the bottom edge · case label sits in the connector lane beneath each dot" },
           { name: "map",              value: "a worker capsule with the forEach glyph · single output · runtime fan-out (no ×n chip on the resting node)" },
+          { name: "gate",             value: "the worker capsule with the messageSquare glyph · one output port per reply (branch-style fan) · channel is a stage setting, not a node treatment · no separate colorway" },
           { name: "bg.default",       value: "palette.loafGradient" },
           { name: "bg.running",       value: "accent 12% mix into bg2 → bg2 at 70% + soft accent glow" },
           { name: "border.default",   value: "1px palette.border2" },

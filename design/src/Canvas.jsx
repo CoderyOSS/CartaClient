@@ -621,7 +621,9 @@ function Canvas({
 
   // Edge map: { "from→to:case": status }
   const stageById = useMemoCV(() => Object.fromEntries(workflow.stages.map(s => [s.id, s])), [workflow]);
-  const isRouting = (s) => s && s.kind !== "worker" && s.kind !== "map";
+  // A gate carries a full worker-sized body (it shows context + reply options),
+  // so edges anchor to it like a worker, not like a tiny routing diamond.
+  const isRouting = (s) => s && s.kind !== "worker" && s.kind !== "map" && s.kind !== "gate";
 
   const flow = canvasStyle === "tree" ? "vertical" : "horizontal";
 
@@ -781,7 +783,7 @@ function Canvas({
           const p = positions[s.id];
           if (!p) return null;
           const status = showInflight ? job.stageStatus[s.id] : null;
-          const isOp = s.kind !== "worker" && s.kind !== "map";
+          const isOp = s.kind !== "worker" && s.kind !== "map" && s.kind !== "gate";
           return (
             <div
               key={s.id}
@@ -1105,5 +1107,14 @@ function MapNode({ stage, status, info, selected, view, onClick, defaultOpen }) 
     </>
   );
 }
+
+// ──────────────────────────────────────────────────────────────
+// Gate node — human-in-the-loop. Renders through WorkerNode: the same single-
+// line Direction-F capsule with the shared golden role-tile, distinguished only
+// by its glyph (messageSquare). It messages a human over a chat app and each
+// reply is just an outgoing edge with a case label — so a gate that asks for a
+// decision fans multiple labeled outputs exactly like a branch, while reading
+// as a worker. No bespoke node style.
+// ──────────────────────────────────────────────────────────────
 
 Object.assign(window, { Canvas, WorkerNode, MapNode });

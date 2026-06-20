@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/stage_data.dart';
 import '../../models/workflow_node.dart';
@@ -132,9 +133,25 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
             _BranchOutputsEditor(
               outputs: node.outputs,
               matchAll: node.matchAll,
-              onUpdate: (outputs, matchAll) => _updateNode(
-                node.copyWith(outputs: outputs, matchAll: matchAll),
-              ),
+              onUpdate: (outputs, matchAll, removedIndex) {
+                var wf = ref.read(workflowProvider);
+                if (removedIndex != null) {
+                  wf = wf.copyWith(
+                    edges: wf.edges
+                        .where((e) => !(e.sourceId == node.id && e.sourcePort == removedIndex))
+                        .map((e) {
+                      if (e.sourceId == node.id && e.sourcePort != null && e.sourcePort! > removedIndex) {
+                        return e.copyWith(sourcePort: e.sourcePort! - 1);
+                      }
+                      return e;
+                    })
+                        .toList(),
+                  );
+                }
+                ref.read(workflowProvider.notifier).state = wf.copyWith(
+                  nodes: wf.nodes.map((n) => n.id == node.id ? n.copyWith(outputs: outputs, matchAll: matchAll) : n).toList(),
+                );
+              },
             ),
           ],
 
@@ -451,7 +468,7 @@ class _ConfigListState extends State<_ConfigList> {
 class _BranchOutputsEditor extends StatefulWidget {
   final List<BranchOutput> outputs;
   final bool matchAll;
-  final void Function(List<BranchOutput>, bool) onUpdate;
+  final void Function(List<BranchOutput>, bool, int? removedIndex) onUpdate;
 
   const _BranchOutputsEditor({
     required this.outputs,
@@ -494,7 +511,7 @@ class _BranchOutputsEditorState extends State<_BranchOutputsEditor> {
                 ),
                 const SizedBox(width: 6),
                 GestureDetector(
-                  onTap: () => widget.onUpdate(widget.outputs, !widget.matchAll),
+                  onTap: () => widget.onUpdate(widget.outputs, !widget.matchAll, null),
                   child: Container(
                     width: 32,
                     height: 18,
@@ -536,11 +553,11 @@ class _BranchOutputsEditorState extends State<_BranchOutputsEditor> {
             onUpdate: (updated) {
               final next = List<BranchOutput>.from(widget.outputs);
               next[e.key] = updated;
-              widget.onUpdate(next, widget.matchAll);
+              widget.onUpdate(next, widget.matchAll, null);
             },
             onDelete: () {
               final next = List<BranchOutput>.from(widget.outputs)..removeAt(e.key);
-              widget.onUpdate(next, widget.matchAll);
+              widget.onUpdate(next, widget.matchAll, e.key);
             },
           );
         }),
@@ -552,7 +569,7 @@ class _BranchOutputsEditorState extends State<_BranchOutputsEditor> {
                 id: '${widget.outputs.length}',
                 label: 'new',
               ));
-            widget.onUpdate(next, widget.matchAll);
+            widget.onUpdate(next, widget.matchAll, null);
           },
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -608,20 +625,32 @@ class _BranchOutputRow extends StatefulWidget {
 }
 
 class _BranchOutputRowState extends State<_BranchOutputRow> {
+  late TextEditingController _labelCtrl;
   late TextEditingController _exprCtrl;
 
   @override
   void initState() {
     super.initState();
+    _labelCtrl = TextEditingController(text: widget.output.label);
     _exprCtrl = TextEditingController(text: widget.output.expression ?? '');
   }
 
   @override
   void didUpdateWidget(covariant _BranchOutputRow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.output.label != widget.output.label) {
+      _labelCtrl.text = widget.output.label;
+    }
     if (oldWidget.output.expression != widget.output.expression) {
       _exprCtrl.text = widget.output.expression ?? '';
     }
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _exprCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -641,10 +670,11 @@ class _BranchOutputRowState extends State<_BranchOutputRow> {
             children: [
               Expanded(
                 child: TextField(
-                  controller: TextEditingController(text: widget.output.label),
+                  controller: _labelCtrl,
                   onChanged: (v) => widget.onUpdate(
                     widget.output.copyWith(label: v),
                   ),
+                  inputFormatters: [LengthLimitingTextInputFormatter(15)],
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,

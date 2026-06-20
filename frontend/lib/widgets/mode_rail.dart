@@ -43,13 +43,21 @@ class ModeRail extends ConsumerWidget {
             label: 'Active \u00b7 running jobs',
             active: mode == AppMode.active,
             badge: activeCount,
-            onTap: () => ref.read(modeProvider.notifier).state = AppMode.active,
+            onTap: () {
+              ref.read(stageDrawerOpenProvider.notifier).state = false;
+              ref.read(selectedStageIdProvider.notifier).state = null;
+              ref.read(modeProvider.notifier).state = AppMode.active;
+            },
           ),
           _RailButton(
             icon: TrailheadIconData.list,
             label: 'History \u00b7 past jobs',
             active: mode == AppMode.history,
-            onTap: () => ref.read(modeProvider.notifier).state = AppMode.history,
+            onTap: () {
+              ref.read(stageDrawerOpenProvider.notifier).state = false;
+              ref.read(selectedStageIdProvider.notifier).state = null;
+              ref.read(modeProvider.notifier).state = AppMode.history;
+            },
           ),
           const Spacer(),
           _RailButton(
