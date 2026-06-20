@@ -551,7 +551,8 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                     },
                     onPointerSignal: (event) {
                       if (event is PointerScrollEvent &&
-                          event.kind == PointerDeviceKind.mouse) {
+                          (event.kind == PointerDeviceKind.mouse ||
+                           event.kind == PointerDeviceKind.trackpad)) {
                         controller.zoomAt(event.scrollDelta.dy, event.localPosition);
                       }
                     },
