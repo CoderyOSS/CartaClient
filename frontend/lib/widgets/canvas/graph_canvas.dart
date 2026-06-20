@@ -460,329 +460,349 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
             }
             return KeyEventResult.ignored;
           },
-          child: Listener(
-            onPointerDown: (event) {
-              if (event.buttons != kPrimaryButton) return;
-              if (!editable || spaceHeld) return;
-              // Don't start marquee if pointer is over a node — node's own
-              // gesture detector handles drag.
-              final worldPos = (event.localPosition - viewport.pan) / viewport.zoom;
-              final overNode = workflow.nodes.any((n) => n.rect.contains(worldPos));
-              if (overNode) {
-                _resetDoubleClick();
-                return;
-              }
-
-              final now = DateTime.now();
-              if (_firstTapDownTime != null &&
-                  _firstTapDownPos != null &&
-                  now.difference(_firstTapDownTime!).inMilliseconds <= _doubleTapMaxMs &&
-                  (event.localPosition - _firstTapDownPos!).distance <= _doubleTapMaxDist) {
-                // Second tap detected — record start for potential drag.
-                _cancelTapTimer();
-                _doubleClickStartPos = event.localPosition;
-                _firstTapDownTime = null;
-                _firstTapDownPos = null;
-                return;
-              }
-
-              // First tap — start timer for single-tap action.
-              _firstTapDownTime = now;
-              _firstTapDownPos = event.localPosition;
-              _cancelTapTimer();
-              _tapTimer = Timer(const Duration(milliseconds: _doubleTapMaxMs), () {
-                if (mounted) {
-                  ref.read(selectionProvider.notifier).clear();
-                  ref.read(operatorPickerProvider.notifier).state = null;
-                }
-                _resetDoubleClick();
-              });
-            },
-            onPointerMove: (event) {
-              if (event.buttons != kPrimaryButton) return;
-              if (spaceHeld) {
-                controller.pan(event.delta);
-                return;
-              }
-
-              // Cancel pending single-tap if pointer moved significantly.
-              if (_firstTapDownPos != null &&
-                  !_doubleClickDragActive &&
-                  _doubleClickStartPos == null &&
-                  (event.localPosition - _firstTapDownPos!).distance > _dragThreshold) {
-                _resetDoubleClick();
-                return;
-              }
-
-              if (_doubleClickStartPos != null && !_doubleClickDragActive) {
-                if ((event.localPosition - _doubleClickStartPos!).distance > _dragThreshold) {
-                  _doubleClickDragActive = true;
-                  _beginMarquee(_doubleClickStartPos!);
-                }
-              }
-
-              if (_doubleClickDragActive && _doubleClickStartPos != null) {
-                _updateMarquee(_doubleClickStartPos!, event.localPosition);
-              }
-            },
-            onPointerUp: (event) {
-              if (_doubleClickDragActive) {
-                _commitMarquee();
-                _resetDoubleClick();
-                return;
-              }
-
-              if (_doubleClickStartPos != null) {
-                // Second tap without drag → toggle scissors.
-                if (editable) _toggleScissors();
-                _resetDoubleClick();
-                return;
-              }
-
-              // First tap up — leave timer running so a second tap can still arrive.
-            },
-            onPointerCancel: (_) {
-              if (_doubleClickDragActive) {
-                _cancelMarquee();
-              }
-              _resetDoubleClick();
-            },
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent &&
-                  event.kind == PointerDeviceKind.mouse) {
-                controller.zoomAt(event.scrollDelta.dy, event.localPosition);
-              }
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onScaleStart: scissors && editable
-                  ? null
-                  : (details) {
-                      if (_doubleClickDragActive) return;
-                      controller.beginScale(details.localFocalPoint);
-                    },
-              onScaleUpdate: scissors && editable
-                  ? null
-                  : (details) {
-                      if (_doubleClickDragActive) return;
-                      controller.updateScale(details.scale, details.localFocalPoint);
-                    },
-              onScaleEnd: scissors && editable
-                  ? null
-                  : (_) {
-                      if (_doubleClickDragActive) return;
-                      controller.endScale();
-                    },
-              onPanStart: scissors && editable
-                  ? (details) {
-                      final worldPos = Offset(
-                        (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
-                        (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
-                      );
-                      ref.read(cutPathProvider.notifier).state = [worldPos];
-                    }
-                  : null,
-              onPanUpdate: scissors && editable
-                  ? (details) {
-                      final worldPos = Offset(
-                        (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
-                        (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
-                      );
-                      ref.read(cutPathProvider.notifier).state = [
-                        ...ref.read(cutPathProvider),
-                        worldPos,
-                      ];
-                    }
-                  : null,
-              onPanEnd: scissors && editable
-                  ? (_) {
-                      final path = ref.read(cutPathProvider);
-                      if (path.length >= 2) {
-                        final threshold = 6.0 / viewport.zoom;
-                        final toDelete = <String>{};
-
-                        for (final edge in workflow.edges) {
-                          final source = workflow.nodes.firstWhere((n) => n.id == edge.sourceId);
-                          final target = workflow.nodes.firstWhere((n) => n.id == edge.targetId);
-
-                          Offset exitPoint(WorkflowNode node) {
-                            final pos = Offset(node.x, node.y);
-                            return switch (node.kind) {
-                              'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                              'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                              _        => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                            };
-                          }
-
-                          Offset entryPoint(WorkflowNode node) {
-                            final pos = Offset(node.x, node.y);
-                            return Offset(pos.dx, pos.dy + node.height / 2);
-                          }
-
-                          final p0 = exitPoint(source);
-                          final p3 = entryPoint(target);
-                          final dx = (p3.dx - p0.dx).abs();
-                          final controlLen = dx.clamp(40.0, 150.0);
-                          final p1 = Offset(p0.dx + controlLen, p0.dy);
-                          final p2 = Offset(p3.dx - controlLen, p3.dy);
-
-                          for (var i = 0; i <= 20; i++) {
-                            final t = i / 20.0;
-                            final u = 1.0 - t;
-                            final tt = t * t;
-                            final uu = u * u;
-                            final uuu = uu * u;
-                            final ttt = tt * t;
-                            final bx = uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx;
-                            final by = uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy;
-
-                            var hit = false;
-                            for (var j = 0; j < path.length - 1; j++) {
-                              final dist = _pointToSegmentDistance(
-                                Offset(bx, by),
-                                path[j],
-                                path[j + 1],
-                              );
-                              if (dist < threshold) {
-                                hit = true;
-                                break;
-                              }
-                            }
-                            if (hit) {
-                              toDelete.add('${edge.sourceId}→${edge.targetId}');
-                              break;
-                            }
-                          }
-                        }
-
-                        if (toDelete.isNotEmpty) {
-                          final current = ref.read(workflowProvider);
-                          ref.read(workflowProvider.notifier).state = current.copyWith(
-                            edges: current.edges.where((e) => !toDelete.contains('${e.sourceId}→${e.targetId}')).toList(),
-                          );
-                        }
-                      }
-                      ref.read(cutPathProvider.notifier).state = const [];
-                    }
-                  : null,
-              child: Container(
-          decoration: BoxDecoration(
-            gradient: AppColors.hearthGradient,
-          ),
           child: ClipRect(
             child: Stack(
               children: [
-                // Dot grid
+                // Background layer: grid + edges + empty space with Listener
                 Positioned.fill(
-                  child: CustomPaint(
-                    painter: DotGridPainter(
-                      zoom: viewport.zoom,
-                      pan: viewport.pan,
+                  child: Listener(
+                    onPointerDown: (event) {
+                      if (event.buttons != kPrimaryButton) return;
+                      if (!editable || spaceHeld) return;
+                      final worldPos = (event.localPosition - viewport.pan) / viewport.zoom;
+                      final overNode = workflow.nodes.any((n) => n.rect.contains(worldPos));
+                      if (overNode) {
+                        _resetDoubleClick();
+                        return;
+                      }
+          
+                      final now = DateTime.now();
+                      if (_firstTapDownTime != null &&
+                          _firstTapDownPos != null &&
+                          now.difference(_firstTapDownTime!).inMilliseconds <= _doubleTapMaxMs &&
+                          (event.localPosition - _firstTapDownPos!).distance <= _doubleTapMaxDist) {
+                        _cancelTapTimer();
+                        _doubleClickStartPos = event.localPosition;
+                        _firstTapDownTime = null;
+                        _firstTapDownPos = null;
+                        return;
+                      }
+          
+                      _firstTapDownTime = now;
+                      _firstTapDownPos = event.localPosition;
+                      _cancelTapTimer();
+                      _tapTimer = Timer(const Duration(milliseconds: _doubleTapMaxMs), () {
+                        if (mounted) {
+                          ref.read(selectionProvider.notifier).clear();
+                          ref.read(operatorPickerProvider.notifier).state = null;
+                        }
+                        _resetDoubleClick();
+                      });
+                    },
+                    onPointerMove: (event) {
+                      if (event.buttons != kPrimaryButton) return;
+                      if (spaceHeld) {
+                        controller.pan(event.delta);
+                        return;
+                      }
+          
+                      if (_firstTapDownPos != null &&
+                          !_doubleClickDragActive &&
+                          _doubleClickStartPos == null &&
+                          (event.localPosition - _firstTapDownPos!).distance > _dragThreshold) {
+                        _resetDoubleClick();
+                        return;
+                      }
+          
+                      if (_doubleClickStartPos != null && !_doubleClickDragActive) {
+                        if ((event.localPosition - _doubleClickStartPos!).distance > _dragThreshold) {
+                          _doubleClickDragActive = true;
+                          _beginMarquee(_doubleClickStartPos!);
+                        }
+                      }
+          
+                      if (_doubleClickDragActive && _doubleClickStartPos != null) {
+                        _updateMarquee(_doubleClickStartPos!, event.localPosition);
+                      }
+                    },
+                    onPointerUp: (event) {
+                      if (_doubleClickDragActive) {
+                        _commitMarquee();
+                        _resetDoubleClick();
+                        return;
+                      }
+          
+                      if (_doubleClickStartPos != null) {
+                        if (editable) _toggleScissors();
+                        _resetDoubleClick();
+                        return;
+                      }
+                    },
+                    onPointerCancel: (_) {
+                      if (_doubleClickDragActive) {
+                        _cancelMarquee();
+                      }
+                      _resetDoubleClick();
+                    },
+                    onPointerSignal: (event) {
+                      if (event is PointerScrollEvent &&
+                          event.kind == PointerDeviceKind.mouse) {
+                        controller.zoomAt(event.scrollDelta.dy, event.localPosition);
+                      }
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onScaleStart: scissors && editable
+                          ? null
+                          : (details) {
+                              if (_doubleClickDragActive) return;
+                              controller.beginScale(details.localFocalPoint);
+                            },
+                      onScaleUpdate: scissors && editable
+                          ? null
+                          : (details) {
+                              if (_doubleClickDragActive) return;
+                              controller.updateScale(details.scale, details.localFocalPoint);
+                            },
+                      onScaleEnd: scissors && editable
+                          ? null
+                          : (_) {
+                              if (_doubleClickDragActive) return;
+                              controller.endScale();
+                            },
+                      onPanStart: scissors && editable
+                          ? (details) {
+                              final worldPos = Offset(
+                                (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
+                                (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
+                              );
+                              ref.read(cutPathProvider.notifier).state = [worldPos];
+                            }
+                          : null,
+                      onPanUpdate: scissors && editable
+                          ? (details) {
+                              final worldPos = Offset(
+                                (details.localPosition.dx - viewport.pan.dx) / viewport.zoom,
+                                (details.localPosition.dy - viewport.pan.dy) / viewport.zoom,
+                              );
+                              ref.read(cutPathProvider.notifier).state = [
+                                ...ref.read(cutPathProvider),
+                                worldPos,
+                              ];
+                            }
+                          : null,
+                      onPanEnd: scissors && editable
+                          ? (_) {
+                              final path = ref.read(cutPathProvider);
+                              if (path.length >= 2) {
+                                final threshold = 6.0 / viewport.zoom;
+                                final toDelete = <String>{};
+          
+                                for (final edge in workflow.edges) {
+                                  final source = workflow.nodes.firstWhere((n) => n.id == edge.sourceId);
+                                  final target = workflow.nodes.firstWhere((n) => n.id == edge.targetId);
+          
+                                  Offset exitPoint(WorkflowNode node) {
+                                    final pos = Offset(node.x, node.y);
+                                    return switch (node.kind) {
+                                      'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                      'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                      _        => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                    };
+                                  }
+          
+                                  Offset entryPoint(WorkflowNode node) {
+                                    final pos = Offset(node.x, node.y);
+                                    return Offset(pos.dx, pos.dy + node.height / 2);
+                                  }
+          
+                                  final p0 = exitPoint(source);
+                                  final p3 = entryPoint(target);
+                                  final dx = (p3.dx - p0.dx).abs();
+                                  final controlLen = dx.clamp(40.0, 150.0);
+                                  final p1 = Offset(p0.dx + controlLen, p0.dy);
+                                  final p2 = Offset(p3.dx - controlLen, p3.dy);
+          
+                                  for (var i = 0; i <= 20; i++) {
+                                    final t = i / 20.0;
+                                    final u = 1.0 - t;
+                                    final tt = t * t;
+                                    final uu = u * u;
+                                    final uuu = uu * u;
+                                    final ttt = tt * t;
+                                    final bx = uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx;
+                                    final by = uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy;
+          
+                                    var hit = false;
+                                    for (var j = 0; j < path.length - 1; j++) {
+                                      final dist = _pointToSegmentDistance(
+                                        Offset(bx, by),
+                                        path[j],
+                                        path[j + 1],
+                                      );
+                                      if (dist < threshold) {
+                                        hit = true;
+                                        break;
+                                      }
+                                    }
+                                    if (hit) {
+                                      toDelete.add('${edge.sourceId}\u2192${edge.targetId}');
+                                      break;
+                                    }
+                                  }
+                                }
+          
+                                if (toDelete.isNotEmpty) {
+                                  final current = ref.read(workflowProvider);
+                                  ref.read(workflowProvider.notifier).state = current.copyWith(
+                                    edges: current.edges.where((e) => !toDelete.contains('${e.sourceId}\u2192${e.targetId}')).toList(),
+                                  );
+                                }
+                              }
+                              ref.read(cutPathProvider.notifier).state = const [];
+                            }
+                          : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: AppColors.hearthGradient,
+                        ),
+                        child: Stack(
+                          children: [
+                            // Dot grid
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: DotGridPainter(
+                                  zoom: viewport.zoom,
+                                  pan: viewport.pan,
+                                ),
+                              ),
+                            ),
+                            // World transform for edges
+                            Transform.translate(
+                              offset: viewport.pan,
+                              child: Transform.scale(
+                                scale: viewport.zoom,
+                                alignment: Alignment.topLeft,
+                                child: UnboundedHitStack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    // Connection edges (behind nodes)
+                                    Positioned.fill(
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.translucent,
+                                        onTapDown: scissors && editable
+                                            ? (details) {
+                                                final tapWorld = details.localPosition;
+                                                const threshold = 18.0;
+                                                String? nearestEdgeKey;
+                                                double nearestDist = threshold;
+          
+                                                for (final edge in workflow.edges) {
+                                                  final source = workflow.nodes.firstWhere((n) => n.id == edge.sourceId);
+                                                  final target = workflow.nodes.firstWhere((n) => n.id == edge.targetId);
+          
+                                                  // Compute dragged positions (same as painter)
+                                                  Offset nodePos(WorkflowNode node) {
+                                                    final inGroupDrag = draggingNodeId != null &&
+                                                        selection.current.length > 1 &&
+                                                        selection.current.contains(draggingNodeId) &&
+                                                        selection.current.contains(node.id);
+                                                    if (draggingNodeId == node.id || inGroupDrag) {
+                                                      return Offset(node.x + dragOffset.dx, node.y + dragOffset.dy);
+                                                    }
+                                                    return Offset(node.x, node.y);
+                                                  }
+          
+                                                  Offset exitPoint(WorkflowNode node) {
+                                                    final pos = nodePos(node);
+                                                    return switch (node.kind) {
+                                                      'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                                      'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                                      _        => Offset(pos.dx + node.width, pos.dy + node.height / 2),
+                                                    };
+                                                  }
+          
+                                                  Offset entryPoint(WorkflowNode node) {
+                                                    final pos = nodePos(node);
+                                                    return Offset(pos.dx, pos.dy + node.height / 2);
+                                                  }
+          
+                                                  final p0 = exitPoint(source);
+                                                  final p3 = entryPoint(target);
+                                                  final dx = (p3.dx - p0.dx).abs();
+                                                  final controlLen = dx.clamp(40.0, 150.0);
+                                                  final p1 = Offset(p0.dx + controlLen, p0.dy);
+                                                  final p2 = Offset(p3.dx - controlLen, p3.dy);
+          
+                                                  // Sample bezier curve
+                                                  for (var i = 0; i <= 20; i++) {
+                                                    final t = i / 20.0;
+                                                    final u = 1.0 - t;
+                                                    final tt = t * t;
+                                                    final uu = u * u;
+                                                    final uuu = uu * u;
+                                                    final ttt = tt * t;
+                                                    final bx = uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx;
+                                                    final by = uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy;
+                                                    final dist = (tapWorld.dx - bx).abs() + (tapWorld.dy - by).abs();
+                                                    if (dist < nearestDist) {
+                                                      nearestDist = dist;
+                                                      nearestEdgeKey = '${edge.sourceId}\u2192${edge.targetId}';
+                                                    }
+                                                  }
+                                                }
+          
+                                                if (nearestEdgeKey != null) {
+                                                  final current = ref.read(workflowProvider);
+                                                  ref.read(workflowProvider.notifier).state = current.copyWith(
+                                                    edges: current.edges.where((e) => '${e.sourceId}\u2192${e.targetId}' != nearestEdgeKey).toList(),
+                                                  );
+                                                }
+                                              }
+                                            : null,
+                                        child: CustomPaint(
+                                          painter: ConnectionPainter(
+                                            nodes: workflow.nodes,
+                                            edges: workflow.edges,
+                                            draggingNodeId: draggingNodeId,
+                                            dragOffset: dragOffset,
+                                            selectedIds: selection.current,
+                                            connectionDrag: connectionDrag,
+                                          ),
+                                          size: Size.infinite,
+                                        ),
+                                      ),
+                                    ),
+                                    // Cut path overlay (scissors mode drag line)
+                                    if (cutPath.isNotEmpty)
+                                      Positioned.fill(
+                                        child: CustomPaint(
+                                          painter: CutPathPainter(points: cutPath),
+                                          size: Size.infinite,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                // World transform
+                // Nodes layer: same world transform, NOT under Listener
                 Transform.translate(
                   offset: viewport.pan,
                   child: Transform.scale(
                     scale: viewport.zoom,
                     alignment: Alignment.topLeft,
-                    child: UnboundedHitStack(
+                    child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        // Connection edges (behind nodes)
-                        Positioned.fill(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTapDown: scissors && editable
-                                ? (details) {
-                                    final tapWorld = details.localPosition;
-                                    const threshold = 18.0;
-                                    String? nearestEdgeKey;
-                                    double nearestDist = threshold;
-
-                                    for (final edge in workflow.edges) {
-                                      final source = workflow.nodes.firstWhere((n) => n.id == edge.sourceId);
-                                      final target = workflow.nodes.firstWhere((n) => n.id == edge.targetId);
-
-                                      // Compute dragged positions (same as painter)
-                                      Offset nodePos(WorkflowNode node) {
-                                        final inGroupDrag = draggingNodeId != null &&
-                                            selection.current.length > 1 &&
-                                            selection.current.contains(draggingNodeId) &&
-                                            selection.current.contains(node.id);
-                                        if (draggingNodeId == node.id || inGroupDrag) {
-                                          return Offset(node.x + dragOffset.dx, node.y + dragOffset.dy);
-                                        }
-                                        return Offset(node.x, node.y);
-                                      }
-
-                                      Offset exitPoint(WorkflowNode node) {
-                                        final pos = nodePos(node);
-                                        return switch (node.kind) {
-                                          'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                                          'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                                          _        => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-                                        };
-                                      }
-
-                                      Offset entryPoint(WorkflowNode node) {
-                                        final pos = nodePos(node);
-                                        return Offset(pos.dx, pos.dy + node.height / 2);
-                                      }
-
-                                      final p0 = exitPoint(source);
-                                      final p3 = entryPoint(target);
-                                      final dx = (p3.dx - p0.dx).abs();
-                                      final controlLen = dx.clamp(40.0, 150.0);
-                                      final p1 = Offset(p0.dx + controlLen, p0.dy);
-                                      final p2 = Offset(p3.dx - controlLen, p3.dy);
-
-                                      // Sample bezier curve
-                                      for (var i = 0; i <= 20; i++) {
-                                        final t = i / 20.0;
-                                        final u = 1.0 - t;
-                                        final tt = t * t;
-                                        final uu = u * u;
-                                        final uuu = uu * u;
-                                        final ttt = tt * t;
-                                        final bx = uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx;
-                                        final by = uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy;
-                                        final dist = (tapWorld.dx - bx).abs() + (tapWorld.dy - by).abs();
-                                        if (dist < nearestDist) {
-                                          nearestDist = dist;
-                                          nearestEdgeKey = '${edge.sourceId}→${edge.targetId}';
-                                        }
-                                      }
-                                    }
-
-                                    if (nearestEdgeKey != null) {
-                                      final current = ref.read(workflowProvider);
-                                      ref.read(workflowProvider.notifier).state = current.copyWith(
-                                        edges: current.edges.where((e) => '${e.sourceId}→${e.targetId}' != nearestEdgeKey).toList(),
-                                      );
-                                    }
-                                  }
-                                : null,
-                            child: CustomPaint(
-                              painter: ConnectionPainter(
-                                nodes: workflow.nodes,
-                                edges: workflow.edges,
-                                draggingNodeId: draggingNodeId,
-                                dragOffset: dragOffset,
-                                selectedIds: selection.current,
-                                connectionDrag: connectionDrag,
-                              ),
-                              size: Size.infinite,
-                            ),
-                          ),
-                        ),
-                        // Nodes
                         ...workflow.nodes.map((node) {
                           final current = selection.current;
                           final isSelected = current.contains(node.id);
-                          // Group drag: if the dragged node is part of a multi-selection, every selected
-                          // node moves together. Single-node drag (length 1 or unselected) moves only it.
                           final inGroupDrag = draggingNodeId != null &&
                               current.contains(draggingNodeId) &&
                               current.length > 1 &&
@@ -790,7 +810,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                           final isDragging = inGroupDrag || (draggingNodeId == node.id);
                           final displayX = isDragging ? node.x + dragOffset.dx : node.x;
                           final displayY = isDragging ? node.y + dragOffset.dy : node.y;
-
+          
                           final nodeWidget = node.id == 'entrypoint'
                               ? EntrypointNode(
                                   node: node,
@@ -838,7 +858,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                 (hoveredNodeId == node.id) ? null : hoveredNodeId;
                                           },
                                         );
-
+          
                           return AnimatedPositioned(
                             key: ValueKey('${workflow.id}_${node.id}'),
                             left: displayX,
@@ -856,7 +876,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                       return;
                                     }
                                     ref.read(selectionProvider.notifier).toggleOne(node.id);
-                                    // close picker when selecting another node
                                     if (!isSelected) {
                                       ref.read(operatorPickerProvider.notifier).state = null;
                                     }
@@ -895,7 +914,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           final cur = ref.read(selectionProvider).current;
                                           final currentWorkflow = ref.read(workflowProvider);
                                           final isGroupDrag = cur.length > 1 && cur.contains(node.id);
-
+          
                                           final newNodes = currentWorkflow.nodes.map((n) {
                                             final shouldMove = isGroupDrag
                                                 ? cur.contains(n.id)
@@ -906,7 +925,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                             final snappedY = _snapCenter(n.y + offset.dy + h / 2) - h / 2;
                                             return n.copyWith(x: snappedX, y: snappedY);
                                           }).toList();
-
+          
                                           ref.read(workflowProvider.notifier).state =
                                               currentWorkflow.copyWith(nodes: newNodes);
                                           ref.read(draggingNodeIdProvider.notifier).state = null;
@@ -926,7 +945,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                     left: -44.0,
                                     top: node.height / 2 - 44.0,
                                     child: _InputHandle(
-                                      onTap: () {},
                                       onPanStart: editable
                                           ? (_) {
                                               final worldPos = _handleWorldPos(node, false, null);
@@ -952,7 +970,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           : null,
                                     ),
                                   ),
-                                  if (isSelected && editable && node.kind == 'branch')
+                                if (isSelected && editable && node.kind == 'branch')
                                   ...node.outputs.isNotEmpty
                                       ? node.outputs.asMap().entries.map((e) {
                                           final port = e.key;
@@ -998,7 +1016,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           );
                                         })
                                       : [
-                                          // Fallback for branch nodes with no outputs defined
                                           Positioned(
                                             left: BranchNode.width - 44.0,
                                             top: node.height / 2 - 44.0,
@@ -1077,20 +1094,10 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                             ),
                           );
                         }),
-
-                        // Cut path overlay (scissors mode drag line)
-                        if (cutPath.isNotEmpty)
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: CutPathPainter(points: cutPath),
-                              size: Size.infinite,
-                            ),
-                          ),
-
-                        ],
-                      ),
+                      ],
                     ),
                   ),
+                ),
                 // Screen-space marquee overlay
                 Consumer(
                   builder: (_, ref, __) {
@@ -1137,7 +1144,16 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                         canDuplicate: menuNode.id != 'entrypoint',
                         onDuplicate: () => duplicateNode(menuAnchor.nodeId),
                         onCollapse: () => collapseNode(menuAnchor.nodeId),
-                        onDelete: () => deleteNode(menuAnchor.nodeId),
+                        onDelete: () {
+                          final selected = ref.read(selectionProvider).current
+                              .where((id) => id != 'entrypoint')
+                              .toList();
+                          if (selected.isNotEmpty) {
+                            for (final id in selected) {
+                              deleteNode(id);
+                            }
+                          }
+                        },
                         onClose: () {
                           ref.read(nodeMenuProvider.notifier).state = null;
                         },
@@ -1186,9 +1202,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
               ],
             ),
           ),
-        ),
-      ),
-    ),
   );
   },
   );
@@ -1265,14 +1278,14 @@ class _OutputHandle extends StatelessWidget {
 }
 
 class _InputHandle extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final GestureDragStartCallback? onPanStart;
   final GestureDragUpdateCallback? onPanUpdate;
   final GestureDragEndCallback? onPanEnd;
   final GestureDragCancelCallback? onPanCancel;
 
   const _InputHandle({
-    required this.onTap,
+    this.onTap,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
