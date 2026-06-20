@@ -99,8 +99,10 @@ class CanvasController extends StateNotifier<CanvasViewport> {
   /// Zoom by a scroll-delta amount anchored to a screen cursor position.
   /// Negative delta zooms in (wheel scroll up); positive zooms out.
   void zoomAt(double scrollDelta, Offset screenCursor) {
-    final factor = scrollDelta < 0 ? 1.15 : 1 / 1.15;
-    zoomBy(factor, focal: screenCursor);
+    // Proportional zoom: ~0.2% per delta unit.
+    // Mouse wheel (≈100) → ~20% zoom. Trackpad micro-event (≈10) → ~2%.
+    final factor = 1.0 - scrollDelta * 0.002;
+    zoomBy(factor.clamp(0.85, 1.15), focal: screenCursor);
   }
 }
 
