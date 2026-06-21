@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::path::Path;
 use std::process::Command;
 
+// ide::cursor — Cursor IDE adapter (process spawn + detection)
+
 use super::{IdeAdapter, JobContext};
 
 pub struct CursorAdapter;

@@ -17,6 +17,22 @@ CoderyTrailhead/
 
 For frontend work, read `frontend/AGENTS.md`. For backend work, read `crates/trailhead-service/AGENTS.md`.
 
+## Knowledge Graph (graphify)
+
+The repo ships a committed knowledge graph in `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md, manifest.json, .graphify_labels.json). Treat any codebase question as a graphify query first:
+
+```bash
+graphify query "how does X work"           # BFS traversal
+graphify path "AuthModule" "Database"      # shortest path between nodes
+graphify explain "SwinTransformer"         # plain-language node explainer
+```
+
+A **post-commit hook** (`.git/hooks/post-commit`, not tracked by git) regenerates and re-commits the graph after every code change (`.rs/.dart/.toml/.ts/.yaml/.json/etc.`). Doc/markdown changes do not trigger it — run `/graphify --update` manually for those. The inner `[graphify]` commit uses `--no-verify` and never blocks the original commit.
+
+**Fresh clone setup** (hook is not shared via git):
+1. Run `/graphify .` once to build the initial graph
+2. Re-create the hook: see `hooks/post-commit` template in repo history (commit `93f7a5f`), or run `graphify hook install` then add the auto-recommit block
+
 ## ⚠️ CRITICAL: Design Prototype vs Real Product
 
 | Directory | What it is | Language | Do NOT edit |
