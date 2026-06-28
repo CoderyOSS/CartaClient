@@ -7,11 +7,22 @@ and never touches the concrete type. This design leverages that existing
 abstraction to add three new provider backends without touching scheduler,
 database, or job-state code.
 
+**Worker cardinality**: One worker = one stage execution. The scheduler spawns
+a fresh worker via `create_worker` (`scheduler.rs:232`), runs the stage prompt
+in `run_stage()`, then destroys the worker (`scheduler.rs:586`). The next stage
+triggers a new worker on the next scheduling tick. All three new providers
+inherit this cardinality: 1 Daytona sandbox = 1 stage, 1 MicroK8s pod = 1
+stage, 1 localhost process = 1 stage. Per-stage clean context is the design
+intent — in-memory state, installed packages, and opencode sessions do NOT
+carry between stages. Cross-stage continuity is via the host project
+bind-mount (filesystem) and the job's `stage_history` column (outputs,
+commits, changed files) only.
+
 ## Goals / Non-Goals
 
 **Goals:**
 - Provider-kind enum + factory function to select backend at daemon startup
-- Three new providers: Daytona VMs, k3s pods, localhost processes
+- Three new providers: Daytona VMs, MicroK8s pods, localhost processes
 - All providers implement the same `WorkerProvider` trait (full coverage:
   create_worker, destroy_worker, get_status, get_logs, list_workers)
 - `trailhead.toml` config sections per provider type with deserialization into
@@ -54,8 +65,8 @@ environment or container. OS-level isolation can be added as a follow-up
 **Chosen: `Option<ResourceLimits>` in WorkerSpec.** Each provider maps
 limits to its own primitives:
 - Docker: `HostConfig.memory`, `HostConfig.nano_cpus`
-- Daytona: VM size tier
-- k3s: Pod resource requests/limits
+- Daytona: VM size tier (snapshot selection)
+- MicroK8s: Pod resource requests/limits
 - Localhost: cgroup v2 limits (future)
 
 Null/None means provider defaults.
@@ -64,51 +75,99 @@ Null/None means provider defaults.
 
 ### Daytona (`provider/daytona.rs`)
 
-Daytona provides a REST API for workspace lifecycle.
+Daytona provides a REST API for sandbox lifecycle.
 Documentation: https://daytona.io/docs
 
 ```
 create_worker(spec):
-  1. POST /workspace
+  1. POST /sandbox
      { name: "trailhead-{job_id}",
-       image: spec.worker_image,
+       snapshot: "daytona-large",   // or custom snapshot
        env: spec.env,
-       git_context: { url: null }  // no clone; push-based
+       autoStopInterval: 0,         // disable auto-stop; heartbeat instead
+       autoDeleteInterval: 0        // ephemeral — auto-delete on destroy
      }
-  2. Poll GET /workspace/{id} until status == "running"
-  3. Return WorkerHandle { id: container_name, provider_id: workspace_id,
+  2. Poll GET /sandbox/{id} until state == "started"
+  3. Return WorkerHandle { id: sandbox_name, provider_id: sandbox_id,
                            status: Running, ip_address }
 
 destroy_worker(id):
-  1. DELETE /workspace/{provider_id}
+  1. DELETE /sandbox/{provider_id}
 
 get_status(id):
-  1. GET /workspace/{provider_id}
-  2. Map: running→Running, creating→Creating, stopped→Stopped, error→Failed
+  1. GET /sandbox/{provider_id}
+  2. Map state: started→Running, creating→Creating, stopped→Stopped, error→Failed
 
 get_logs(id, tail):
-  1. GET /workspace/{provider_id}/logs?tail=N
+  1. GET /sandbox/{provider_id}/logs?tail=N
 
 list_workers():
-  1. GET /workspaces?prefix=trailhead-
+  1. GET /sandbox?labels=trailhead=true
   2. Map each to WorkerHandle
 ```
 
-**Project content delivery**: Daytona VMs don't bind-mount host directories.
-Trailhead pushes project content to the VM after creation via:
-1. `rsync` over SSH (if VM exposes SSH), or
+**Project content delivery**: Daytona sandboxes don't bind-mount host
+directories. Trailhead pushes project content to the sandbox after creation
+via:
+1. `rsync` over SSH (if sandbox exposes SSH), or
 2. Tarball upload via Daytona file API, or
-3. Git clone inside the VM (Daytona's native model)
+3. Git clone inside the sandbox (Daytona's native model)
 
 Option 3 (git clone) is simplest: Trailhead passes the repo URL to Daytona
 at create time, and Daytona clones it. This means the project branch must
 already be pushed to the remote — local uncommitted changes are not
-available in the VM.
+available in the sandbox.
 
-### k3s (`provider/k3s.rs`)
+#### Daytona resources (per-stage)
 
-Uses the `kube` crate to interact with the k3s API server
-(https://kube.rs).
+Default sandbox resources are 1 vCPU / 1GiB / 3GiB; organization max is
+4 vCPU / 8GiB / 10GiB. Because the unit of work is a single stage (not a
+whole workflow), this ceiling is ample for typical coding-agent stages.
+Default snapshot: `daytona-large` (4 vCPU / 8GiB / 10GiB). Custom snapshots
+can be built from OCI images for project-specific toolchains.
+
+GPU sandboxes (up to 16 vCPU / 192GiB / 512GiB on H100/RTX Pro 6000) are
+available for ML-training stages via `daytona-gpu` snapshot.
+
+For deployments that exceed cloud limits, Daytona OSS can be self-hosted on
+the same VPS as Trailhead — escapes the per-organization resource caps.
+
+#### Daytona auto-stop heartbeat
+
+Daytona auto-stop kills sandboxes after a configurable idle interval. The
+docs explicitly warn: *"Merely having a script or background task running is
+not sufficient to keep the sandbox alive."* A long-running single stage
+(compile, test suite, slow LLM call) could be terminated mid-execution.
+
+Mitigation:
+- Set `autoStopInterval: 0` at sandbox creation to disable auto-stop entirely.
+- If `autoStopInterval > 0` is desired for cost control, the Daytona provider
+  must spawn a heartbeat task that calls `sandbox.refresh_activity()` every
+  ~60s for the lifetime of the stage. The heartbeat task is cancelled when
+  `run_stage()` returns.
+
+#### Daytona OpenCode pre-baked
+
+Daytona's default snapshots ship with `opencode-ai` v1.1.35 (see
+https://www.daytona.io/docs/en/snapshots — Node.js packages). When using a
+default snapshot, the Daytona provider can skip the OpenCode install step
+that the Docker provider performs inside its worker image. Custom snapshots
+built from a bare image must install OpenCode themselves.
+
+### MicroK8s (`provider/microk8s.rs`)
+
+Uses the `kube` crate to interact with the MicroK8s API server
+(https://kube.rs). MicroK8s is the reference/supported Kubernetes distro;
+other CNCF-conformant clusters may work but are untested.
+
+**MicroK8s setup prerequisites**:
+- Install: `sudo snap install microk8s --classic`
+- Required addons: `microk8s enable dns storage registry`
+  (dns for service discovery, storage for PersistentVolumes, registry for
+  local image pulls from the Trailhead worker image)
+- Default kubeconfig path: `/var/snap/microk8s/current/credentials/client.config`
+- Single-node by default; multi-node via `microk8s add-node`
+- `microk8s kubectl` wrapper, or symlink `kubectl` → microk8s binary
 
 ```
 create_worker(spec):
@@ -139,14 +198,14 @@ get_logs(id, tail):
 
 **Project path delivery**: Two modes:
 - **hostPath**: Bind-mount `spec.project_path` into the pod. Requires
-  the host directory to be accessible on the k3s node (single-node k3s
-  or NFS mount on all nodes).
+  the host directory to be accessible on the MicroK8s node (single-node
+  MicroK8s or NFS mount on all nodes).
 - **git clone**: Use an init-container that clones the repo into an
   emptyDir volume shared with the worker container. No host filesystem
   dependency, works on multi-node clusters.
 
 Config flag: `project_path_mode = "hostPath" | "git"` in the
-`[worker_providers.k3s]` section.
+`[worker_providers.microk8s]` section.
 
 ### Localhost (`provider/local.rs`)
 
@@ -192,20 +251,21 @@ worker_binary = "/usr/local/bin/opencode"` in trailhead.toml.
 ## Config Schema
 
 ```toml
-# Select default worker provider: "docker", "daytona", "k3s", "localhost"
+# Select default worker provider: "docker", "daytona", "microk8s", "localhost"
 worker_provider = "docker"
 
 [worker_providers.daytona]
 api_key = "${DAYTONA_API_KEY}"
 api_url = "https://api.daytona.io"
-region = "us-east-1"
-vm_size = "small"
-project_content = "git"             # "git" | "push"
+target = "us-east-1"                  # Daytona region
+snapshot = "daytona-large"            # default snapshot (4 vCPU / 8GiB / 10GiB)
+auto_stop_interval = 0                # disable auto-stop; provider heartbeats
+project_content = "git"               # "git" | "push"
 
-[worker_providers.k3s]
-kubeconfig = "/etc/kubernetes/kubeconfig"
+[worker_providers.microk8s]
+kubeconfig = "/var/snap/microk8s/current/credentials/client.config"
 namespace = "trailhead"
-project_path_mode = "git"           # "hostPath" | "git"
+project_path_mode = "git"             # "hostPath" | "git"
 image_pull_policy = "Always"
 
 [worker_providers.localhost]
@@ -223,11 +283,11 @@ workspace_dir = "/opt/codery/workspaces"
 pub enum ProviderKind {
     Docker,
     Daytona,
-    K3s,
+    MicroK8s,
     Localhost,
 }
 
-impl FromStr for ProviderKind { /* parse "docker", "daytona", etc. */ }
+impl FromStr for ProviderKind { /* parse "docker", "daytona", "microk8s", "localhost" */ }
 
 pub fn create_provider(
     kind: &ProviderKind,
@@ -240,9 +300,9 @@ pub fn create_provider(
             let cfg = config.daytona_provider()?;
             Ok(Arc::new(daytona::DaytonaProvider::new(cfg)?))
         }
-        ProviderKind::K3s => {
-            let cfg = config.k3s_provider()?;
-            Ok(Arc::new(k3s::K3sProvider::new(cfg)?))
+        ProviderKind::MicroK8s => {
+            let cfg = config.microk8s_provider()?;
+            Ok(Arc::new(microk8s::MicroK8sProvider::new(cfg)?))
         }
         ProviderKind::Localhost => {
             let cfg = config.localhost_provider()?;
@@ -285,18 +345,19 @@ pub struct TrailheadConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerProvidersSection {
     pub daytona: Option<DaytonaProviderConfig>,
-    pub k3s: Option<K3sProviderConfig>,
+    pub microk8s: Option<MicroK8sProviderConfig>,
     pub localhost: Option<LocalhostProviderConfig>,
 }
 
 pub struct DaytonaProviderConfig {
     pub api_key: String,
     pub api_url: String,
-    pub region: String,
-    pub vm_size: String,
+    pub target: String,             // Daytona region
+    pub snapshot: String,           // default: "daytona-large"
+    pub auto_stop_interval: u32,    // default: 0 (disabled)
     pub project_content: Option<String>,
 }
-// + K3sProviderConfig, LocalhostProviderConfig
+// + MicroK8sProviderConfig, LocalhostProviderConfig
 ```
 
 ## File Layout
@@ -304,10 +365,10 @@ pub struct DaytonaProviderConfig {
 ```
 crates/trailhead-service/src/
 ├── provider/
-│   ├── mod.rs         ← ProviderKind enum, create_producer factory, ResourceLimits
+│   ├── mod.rs         ← ProviderKind enum, create_provider factory, ResourceLimits
 │   ├── docker.rs      ← unchanged (existing)
 │   ├── daytona.rs     ← NEW
-│   ├── k3s.rs         ← NEW
+│   ├── microk8s.rs    ← NEW
 │   └── local.rs       ← NEW
 ├── config.rs          ← +worker_provider, worker_providers fields
 ├── main.rs            ← factory call replaces DockerProvider::new()
@@ -319,10 +380,30 @@ crates/trailhead-service/src/
 
 1. **Daytona API key**: Read from `trailhead.toml` with `${ENV_VAR}` expansion,
    stored in process memory only. Never logged or exposed in API responses.
-2. **k3s kubeconfig**: Path to kubeconfig file. File permissions validated
-   (must be 0600 or owner-only). No inline credentials in config.
+2. **MicroK8s kubeconfig**: Path to kubeconfig file
+   (`/var/snap/microk8s/current/credentials/client.config` by default).
+   File permissions validated (must be 0600 or owner-only). No inline
+   credentials in config.
 3. **Localhost**: Worker process inherits Trailhead's user. No sandboxing in
    Phase 1. Config must be read-only by trailhead user. Warning logged when
    localhost provider is selected.
 4. **All providers**: `submit_result` MCP tool validates job ownership and
    stage matching (existing mechanism unchanged).
+
+## Future capabilities (Daytona-specific)
+
+Out of Phase 1 scope, but worth noting for later Trailhead enhancements that
+the Daytona provider uniquely enables (MicroK8s and localhost have no
+equivalents):
+
+- **Fork** for parallel stage attempts — duplicate a stage's sandbox
+  filesystem + memory into N independent children, run the same prompt with
+  different models/seeds, pick the best result. Maps to a new workflow YAML
+  stage type `parallel_attempts`.
+- **Linked sandboxes** for multi-agent stages — parent orchestrator sandbox
+  spawns N child sandboxes on a shared internal network, coordinates work
+  between them. Maps to a new workflow YAML stage type `multi_agent`.
+
+Pause and snapshot primitives are NOT listed because per-stage workers are
+short-lived (created and destroyed per stage, see Context). Pause/archive
+benefit long-running sessions, which the per-stage model does not produce.

@@ -12,19 +12,26 @@ CoderyTrailhead/
 │   ├── AGENTS.md                   ← Backend-specific instructions
 │   └── ...
 ├── openspec/                       ← OpenSpec change proposals
-└── containers/worker/              ← Docker worker container
+└── containers/worker/              ← Worker container image (Docker provider default)
 ```
 
 For frontend work, read `frontend/AGENTS.md`. For backend work, read `crates/trailhead-service/AGENTS.md`.
 
 ## Knowledge Graph (graphify)
 
-The repo ships a committed knowledge graph in `graphify-out/` (graph.json, graph.html, GRAPH_REPORT.md, manifest.json, .graphify_labels.json). Treat any codebase question as a graphify query first:
+Binary at `~/.local/bin/graphify` (run `graphify --help` for the full command
+list). The repo ships a committed knowledge graph in `graphify-out/` (graph.json,
+graph.html, GRAPH_REPORT.md, manifest.json, .graphify_labels.json). Treat any
+codebase question as a graphify query first:
 
 ```bash
 graphify query "how does X work"           # BFS traversal
-graphify path "AuthModule" "Database"      # shortest path between nodes
+graphify path "AuthModule" "Database"      # shortest path between two nodes
 graphify explain "SwinTransformer"         # plain-language node explainer
+graphify add <url>                          # fetch URL into ./raw, update graph
+graphify merge-graphs <g1> <g2>            # union-merge cross-repo graphs
+graphify diagnose multigraph               # detect same-endpoint edge collapse
+graphify install [--platform P]            # install skill into a platform config
 ```
 
 A **post-commit hook** (`.git/hooks/post-commit`, not tracked by git) regenerates and re-commits the graph after every code change (`.rs/.dart/.toml/.ts/.yaml/.json/etc.`). Doc/markdown changes do not trigger it — run `/graphify --update` manually for those. The inner `[graphify]` commit uses `--no-verify` and never blocks the original commit.
@@ -100,11 +107,46 @@ stages:
     prompt: "Fix the bugs you found"
 ```
 
-**Worker**: Docker container instance
-- `provider`: "docker" (k8s planned)
+**Worker**: One worker instance per stage execution (see Worker Lifecycle below)
+- `provider`: which WorkerProvider backend created it (see Worker Providers)
 - `status`: creating → running → destroying
 - `project_path`: host project path mounted at `/workspace`
 - `job_id`: links back to job
+
+## Worker Lifecycle
+
+**One worker per stage.** Scheduler spawns a fresh worker for each stage
+execution, runs the stage prompt, then destroys the worker (`scheduler.rs:586`).
+The next stage triggers a new worker on the next scheduling tick.
+
+- Filesystem state persists across stages via the host project bind-mount
+  (`project_path` → `/workspace`).
+- In-memory state, installed packages, and opencode sessions do NOT carry
+  between stages — each stage starts from clean context.
+- Stage outputs (text, commit SHAs, changed files) are persisted in the job's
+  `stage_history` column so template variables like `{{stages.foo.output}}`
+  resolve in later stages.
+- Cross-stage continuity is by filesystem + DB only, never by worker process
+  lifetime.
+
+## Worker Providers
+
+Pluggable backends implementing the `WorkerProvider` trait
+(`crates/trailhead-service/src/provider/mod.rs`). One sandbox/pod/process =
+one stage execution (per Worker Lifecycle above).
+
+| Provider  | Status         | Module                       | Notes                                                                       |
+|-----------|----------------|------------------------------|-----------------------------------------------------------------------------|
+| Docker    | Active         | `provider/docker.rs`         | Default; uses bollard; bind-mounts `project_path`                           |
+| Daytona   | In development | planned `provider/daytona.rs`| Cloud VM sandboxes via Daytona REST API; project content delivered via git |
+| MicroK8s  | In development | planned `provider/microk8s.rs`| Kubernetes pods via kube-rs; MicroK8s is the reference/supported distro    |
+| localhost | In development | planned `provider/local.rs`  | Host child processes; no OS-level sandboxing in Phase 1                     |
+
+Provider is selected at daemon startup via the `--worker-provider` CLI flag or
+the `worker_provider` key in `trailhead.toml`. Single provider per daemon
+instance (not per-job). See
+`openspec/changes/multi-provider-workers/design.md` for the in-development
+Daytona / MicroK8s / localhost providers.
 
 ## Feature Status
 
@@ -127,7 +169,6 @@ stages:
 
 ### Planned (🚧)
 - Human-in-the-loop approvals between stages
-- Kubernetes worker provider (swap Docker)
 - Real SSE event streaming
 - Token usage tracking
 
@@ -224,7 +265,7 @@ If set, the project directory is bind-mounted directly. Otherwise: `{PROJECT_BAS
 ## Active Changes
 
 - **multi-provider-workers**: `openspec/changes/multi-provider-workers/` — adds
-  Daytona VM, k3s pod, and localhost process providers alongside the existing
+  Daytona VM, MicroK8s pod, and localhost process providers alongside the existing
   Docker provider. See `design.md` for integration details.
 
 ## Recently Landed
@@ -389,5 +430,5 @@ Version is stored in `crates/trailhead-service/Cargo.toml`. Build and deploy are
 1. **Always use project_path** for E2E tests — point to `test-workspace/` on the host
 2. **Migrations**: add to `MIGRATIONS` array, execute individually
 3. **New MCP tools**: add to `TrailheadMcpServer` impl with `#[tool]` macro
-4. **Worker providers**: implement `WorkerProvider` trait (see `docker.rs`)
+4. **Worker providers**: implement `WorkerProvider` trait (see `docker.rs`); consult `openspec/changes/multi-provider-workers/design.md` for Daytona/MicroK8s/localhost integration
 5. **Schema changes**: update both CREATE TABLE in fixtures + MIGRATIONS
