@@ -1,4 +1,5 @@
 import 'dart:async' show Timer;
+import 'dart:convert' show jsonDecode;
 import 'dart:math' show Random;
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/gestures.dart' show PointerScrollEvent, kPrimaryButton;
@@ -14,6 +15,8 @@ import '../../providers/mode_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/mock_data.dart';
 import '../../providers/operator_picker_provider.dart';
+import '../../providers/thrt_provider.dart';
+import '../../services/thrt_api.dart' show FlowStatus;
 import '../../theme/tokens.dart';
 import '../../widgets/mode_rail.dart';
 import '../../providers/connection_drag_provider.dart';
@@ -28,8 +31,6 @@ import '../../providers/marquee_provider.dart';
 import '../../providers/node_menu_provider.dart';
 import '../../providers/selection_notifier.dart';
 import 'node_context_menu.dart';
-import 'entrypoint_node.dart';
-import 'fan_node.dart';
 import 'routing_node.dart';
 import 'worker_node.dart';
 import 'canvas_toolbar.dart';
@@ -51,6 +52,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
   DateTime? _firstTapDownTime;
   Offset? _firstTapDownPos;
   Timer? _tapTimer;
+  Timer? _statusTimer;
   bool _doubleClickDragActive = false;
   Offset? _doubleClickStartPos;
 
@@ -113,9 +115,110 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     ref.read(marqueeProvider.notifier).state = MarqueeState();
   }
 
-  void _openStageDrawer(String nodeId) {
-    ref.read(selectedStageIdProvider.notifier).state = nodeId;
-    ref.read(stageDrawerOpenProvider.notifier).state = true;
+  void _openNodeDrawer(String nodeId) {
+    ref.read(selectedNodeIdProvider.notifier).state = nodeId;
+    ref.read(nodeDrawerOpenProvider.notifier).state = true;
+  }
+
+  void _showInjectDialog(String sourceNodeId) {
+    final controller = TextEditingController(text: '"hello"');
+    showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.bg1,
+          title: Text(
+            'Inject payload -> $sourceNodeId',
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13,
+              color: AppColors.fg0,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Elixir term. String values need double quotes.',
+                style: TextStyle(fontSize: 11, color: AppColors.fg3),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: AppColors.fg0,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: AppColors.bg0,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: AppColors.border2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('cancel', style: TextStyle(color: AppColors.fg2)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, controller.text);
+              },
+              child: Text('inject', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        );
+      },
+    ).then((raw) async {
+      if (raw == null) return;
+      dynamic payload;
+      try {
+        payload = jsonDecode(raw);
+      } catch (_) {
+        if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+          payload = raw.substring(1, raw.length - 1);
+        } else {
+          payload = raw;
+        }
+      }
+      final wf = ref.read(workflowProvider);
+      try {
+        await ref.read(thrtApiProvider).trigger(wf.name, sourceNodeId, payload);
+        final status = await ref.read(thrtApiProvider).status(wf.name);
+        ref.read(flowStatusProvider.notifier).state =
+            Map<String, FlowStatus>.from(ref.read(flowStatusProvider))
+              ..[wf.name] = status;
+      } catch (e) {
+        debugPrint('inject failed: $e');
+      }
+    });
+  }
+
+  Future<void> _pollStatus() async {
+    final deployed = ref.read(deployedFlowsProvider);
+    if (deployed.isEmpty) return;
+    try {
+      final api = ref.read(thrtApiProvider);
+      final updates = <String, FlowStatus>{};
+      for (final name in deployed) {
+        updates[name] = await api.status(name);
+      }
+      final current = ref.read(flowStatusProvider);
+      final cleaned = Map<String, FlowStatus>.from(current)
+        ..removeWhere((k, _) => !deployed.contains(k) && !updates.containsKey(k));
+      cleaned.addAll(updates);
+      ref.read(flowStatusProvider.notifier).state = cleaned;
+    } catch (e) {
+      debugPrint('status poll failed: $e');
+    }
   }
 
   void _toggleScissors() {
@@ -135,6 +238,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
   @override
   void dispose() {
     _tapTimer?.cancel();
+    _statusTimer?.cancel();
     super.dispose();
   }
 
@@ -180,6 +284,17 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
       });
     });
 
+    ref.listen<Set<String>>(deployedFlowsProvider, (prev, next) {
+      _statusTimer?.cancel();
+      if (next.isNotEmpty) {
+        _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          _pollStatus();
+        });
+      }
+    });
+
+    final flowStatuses = ref.watch(flowStatusProvider);
+
     void showPicker(Offset worldPos, String sourceId, {int? sourcePort}) {
       if (!editable) return;
       final screenX = worldPos.dx * viewport.zoom + viewport.pan.dx;
@@ -188,6 +303,17 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         screenPos: Offset(screenX, screenY),
         sourceNodeId: sourceId,
         sourcePort: sourcePort,
+      );
+    }
+
+    void showPickerStandalone() {
+      if (!editable) return;
+      final size = MediaQuery.of(context).size;
+      const widgetWidth = 240.0;
+      final screenX = size.width / 2 - widgetWidth / 2;
+      final screenY = size.height / 2 - 80;
+      ref.read(operatorPickerProvider.notifier).state = PickerAnchor(
+        screenPos: Offset(screenX, screenY),
       );
     }
 
@@ -206,11 +332,10 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
 
     Offset _handleWorldPos(WorkflowNode node, bool isOutput, int? port) {
       if (isOutput) {
-        return switch (node.kind) {
-          'worker' => Offset(node.x + node.width, node.y + node.height / 2),
-          'fan'    => Offset(node.x + node.width, node.y + node.height / 2),
-          _        => _branchOutputWorldPos(node, port),
-        };
+        if (node.kind == 'function' && node.outputs.isNotEmpty) {
+          return _branchOutputWorldPos(node, port);
+        }
+        return Offset(node.x + node.width, node.y + node.height / 2);
       }
       return Offset(node.x, node.y + node.height / 2);
     }
@@ -236,8 +361,8 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
             best = (nodeId: node.id, isOutput: false, port: null);
           }
         } else {
-          // Seeking output — branch ports only, worker/fan have single output
-          if (node.kind == 'branch' && node.outputs.isNotEmpty) {
+          // Seeking output — function ports only
+          if (node.kind == 'function' && node.outputs.isNotEmpty) {
             for (var p = 0; p < node.outputs.length; p++) {
               final pos = _handleWorldPos(node, true, p);
               final dist = (pos - worldPos).distance;
@@ -327,14 +452,34 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
 
     void addNode(OperatorType type) {
       final sourceId = pickerAnchor?.sourceNodeId;
-      if (sourceId == null) return;
+      final id = 'node_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+
+      if (sourceId == null) {
+        final vp = ref.read(canvasControllerProvider);
+        final screenSize = MediaQuery.of(context).size;
+        final centerX = (-vp.pan.dx + screenSize.width / 2) / vp.zoom;
+        final centerY = (-vp.pan.dy + screenSize.height / 2) / vp.zoom;
+        final newNode = WorkflowNode(
+          id: id,
+          kind: type.kind,
+          label: type.label,
+          x: _snap(centerX - 100),
+          y: _snap(centerY - 18),
+          outputs: type.kind == 'function' ? WorkflowNode.defaultBranchOutputs : const [],
+        );
+        ref.read(workflowProvider.notifier).state = workflow.copyWith(
+          nodes: [...workflow.nodes, newNode],
+        );
+        ref.read(selectionProvider.notifier).selectOne(id);
+        ref.read(operatorPickerProvider.notifier).state = null;
+        return;
+      }
 
       final source = workflow.nodes.firstWhere(
         (n) => n.id == sourceId,
         orElse: () => workflow.nodes.first,
       );
 
-      final id = 'node_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
       final sourceHeight = source.height;
       final newNodeHeight = WorkflowNode(id: '', kind: type.kind, label: '', x: 0, y: 0).height;
       final snappedX = _snap(source.x + 220);
@@ -345,7 +490,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         label: type.label,
         x: snappedX,
         y: snappedY,
-        outputs: type.kind == 'branch' ? WorkflowNode.defaultBranchOutputs : const [],
+        outputs: type.kind == 'function' ? WorkflowNode.defaultBranchOutputs : const [],
       );
 
       final edge = WorkflowEdge(
@@ -364,7 +509,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     }
 
     void deleteNode(String nodeId) {
-      if (nodeId == 'entrypoint') return;
       final currentWorkflow = ref.read(workflowProvider);
       final newNodes = currentWorkflow.nodes.where((n) => n.id != nodeId).toList();
       final newEdges = currentWorkflow.edges
@@ -382,7 +526,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     }
 
     void duplicateNode(String nodeId) {
-      if (nodeId == 'entrypoint') return;
       final node = workflow.nodes.firstWhere((n) => n.id == nodeId);
       final id = 'node_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
       final newNode = WorkflowNode(
@@ -401,7 +544,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     }
 
     void collapseNode(String nodeId) {
-      if (nodeId == 'entrypoint') return;
       final parentEdge = workflow.edges.cast<WorkflowEdge?>().firstWhere(
         (e) => e?.targetId == nodeId,
         orElse: () => null,
@@ -819,8 +961,8 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                           final displayX = isDragging ? node.x + dragOffset.dx : node.x;
                           final displayY = isDragging ? node.y + dragOffset.dy : node.y;
           
-                          final nodeWidget = node.id == 'entrypoint'
-                              ? EntrypointNode(
+                          final nodeWidget = node.kind == 'function'
+                              ? BranchNode(
                                   node: node,
                                   selected: isSelected,
                                   onEnter: () {
@@ -831,41 +973,17 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                         (hoveredNodeId == node.id) ? null : hoveredNodeId;
                                   },
                                 )
-                              : node.kind == 'worker'
-                                  ? WorkerNode(
-                                      node: node,
-                                      selected: isSelected,
-                                      onEnter: () {
-                                        ref.read(hoveredNodeProvider.notifier).state = node.id;
-                                      },
-                                      onExit: () {
-                                        ref.read(hoveredNodeProvider.notifier).state =
-                                            (hoveredNodeId == node.id) ? null : hoveredNodeId;
-                                      },
-                                    )
-                                  : node.kind == 'fan'
-                                      ? MapNode(
-                                          node: node,
-                                          selected: isSelected,
-                                          onEnter: () {
-                                            ref.read(hoveredNodeProvider.notifier).state = node.id;
-                                          },
-                                          onExit: () {
-                                            ref.read(hoveredNodeProvider.notifier).state =
-                                                (hoveredNodeId == node.id) ? null : hoveredNodeId;
-                                          },
-                                        )
-                                      : BranchNode(
-                                          node: node,
-                                          selected: isSelected,
-                                          onEnter: () {
-                                            ref.read(hoveredNodeProvider.notifier).state = node.id;
-                                          },
-                                          onExit: () {
-                                            ref.read(hoveredNodeProvider.notifier).state =
-                                                (hoveredNodeId == node.id) ? null : hoveredNodeId;
-                                          },
-                                        );
+                              : WorkerNode(
+                                  node: node,
+                                  selected: isSelected,
+                                  onEnter: () {
+                                    ref.read(hoveredNodeProvider.notifier).state = node.id;
+                                  },
+                                  onExit: () {
+                                    ref.read(hoveredNodeProvider.notifier).state =
+                                        (hoveredNodeId == node.id) ? null : hoveredNodeId;
+                                  },
+                                );
           
                           return AnimatedPositioned(
                             key: ValueKey('${workflow.id}_${node.id}'),
@@ -888,15 +1006,15 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                       ref.read(operatorPickerProvider.notifier).state = null;
                                     }
                                   },
-                                  onDoubleTap: () => _openStageDrawer(node.id),
-                                  onLongPressStart: isSelected && editable && node.id != 'entrypoint'
+                                  onDoubleTap: () => _openNodeDrawer(node.id),
+                                  onLongPressStart: isSelected && editable
                                       ? (details) {
                                           ref.read(nodeMenuProvider.notifier).state = NodeMenuAnchor(
                                             nodeId: node.id,
                                           );
                                         }
                                       : null,
-                                  onSecondaryTapDown: isSelected && editable && node.id != 'entrypoint'
+                                  onSecondaryTapDown: isSelected && editable
                                       ? (details) {
                                           ref.read(nodeMenuProvider.notifier).state = NodeMenuAnchor(
                                             nodeId: node.id,
@@ -949,7 +1067,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                       : null,
                                   child: nodeWidget,
                                 ),
-                                if (isSelected && editable && node.id != 'entrypoint')
+                                if (isSelected && editable)
                                   Positioned(
                                     left: -44.0,
                                     top: node.height / 2 - 44.0,
@@ -979,7 +1097,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           : null,
                                     ),
                                   ),
-                                if (isSelected && editable && node.kind == 'branch')
+                                if (isSelected && editable && node.kind == 'function')
                                   ...node.outputs.isNotEmpty
                                       ? node.outputs.asMap().entries.map((e) {
                                           final port = e.key;
@@ -1062,7 +1180,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                             ),
                                           ),
                                         ],
-                                if (isSelected && editable && node.kind != 'branch')
+                                if (isSelected && editable && node.kind != 'function')
                                   Positioned(
                                     left: node.width - 44.0,
                                     top: node.height / 2 - 44.0,
@@ -1099,6 +1217,39 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           : null,
                                     ),
                                   ),
+                                if (flowStatuses.containsKey(workflow.name))
+                                  Builder(builder: (context) {
+                                    final status = flowStatuses[workflow.name]!;
+                                    final nodeStats = status.nodes[node.id];
+                                    if (nodeStats == null) return const SizedBox.shrink();
+                                    return Positioned(
+                                      top: -12,
+                                      right: -6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.bg2,
+                                          border: Border.all(color: AppColors.border1),
+                                          borderRadius: BorderRadius.circular(6),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x40000000),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          'in:${nodeStats.msgsIn} out:${nodeStats.msgsOut}',
+                                          style: TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 9,
+                                            color: AppColors.accent,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
                               ],
                             ),
                           );
@@ -1150,12 +1301,11 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                       );
                       return NodeContextMenu(
                         anchor: screenPos,
-                        canDuplicate: menuNode.id != 'entrypoint',
+                        canDuplicate: true,
                         onDuplicate: () => duplicateNode(menuAnchor.nodeId),
                         onCollapse: () => collapseNode(menuAnchor.nodeId),
                         onDelete: () {
                           final selected = ref.read(selectionProvider).current
-                              .where((id) => id != 'entrypoint')
                               .toList();
                           if (selected.isNotEmpty) {
                             for (final id in selected) {
@@ -1164,7 +1314,11 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                           }
                         },
                         onInspect: () {
-                          _openStageDrawer(menuAnchor.nodeId);
+                          _openNodeDrawer(menuAnchor.nodeId);
+                          ref.read(nodeMenuProvider.notifier).state = null;
+                        },
+                        onInject: () {
+                          _showInjectDialog(menuAnchor.nodeId);
                           ref.read(nodeMenuProvider.notifier).state = null;
                         },
                         onClose: () {

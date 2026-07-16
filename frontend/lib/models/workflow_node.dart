@@ -164,22 +164,14 @@ class WorkflowNode {
 }
 
 extension WorkflowNodeRect on WorkflowNode {
-  double get width => switch (kind) {
-    'worker' => WorkflowNode.workerWidth,
-    'fan'    => WorkflowNode.fanWidth,
-    _        => WorkflowNode.branchWidth,
-  };
+  double get width => kind == 'function' ? WorkflowNode.branchWidth : WorkflowNode.workerWidth;
 
-  double get height => switch (kind) {
-    'worker' => WorkflowNode.workerHeight,
-    'fan'    => WorkflowNode.fanHeight,
-    _        => outputs.isNotEmpty
-        ? WorkflowNode.branchPadY * 2 +
-            outputs.length * WorkflowNode.branchRowHeight
-        : WorkflowNode.branchPadY * 2 +
-            WorkflowNode.defaultBranchOutputs.length *
-                WorkflowNode.branchRowHeight,
-  };
+  double get height => kind == 'function'
+      ? (outputs.isNotEmpty
+          ? WorkflowNode.branchPadY * 2 + outputs.length * WorkflowNode.branchRowHeight
+          : WorkflowNode.branchPadY * 2 +
+              WorkflowNode.defaultBranchOutputs.length * WorkflowNode.branchRowHeight)
+      : WorkflowNode.workerHeight;
 
   Rect get rect => Rect.fromLTWH(x, y, width, height);
 }

@@ -1052,7 +1052,7 @@ class CanvasSection extends ConsumerWidget {
         ),
         SettingRow(
           title: 'Edge style',
-          desc: 'How connections are drawn between stages.',
+          desc: 'How connections are drawn between nodes.',
           last: true,
           control: Seg(
             value: state.edgeStyle,
@@ -1329,7 +1329,7 @@ class PluginsSection extends ConsumerWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
               child: Text(
-                'Extend Trailhead with custom stages, reviewers, and integrations.',
+                'Extend Trailhead with custom nodes, reviewers, and integrations.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'monospace',

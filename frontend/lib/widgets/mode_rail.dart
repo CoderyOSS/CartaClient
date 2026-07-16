@@ -44,8 +44,8 @@ class ModeRail extends ConsumerWidget {
             active: mode == AppMode.active,
             badge: activeCount,
             onTap: () {
-              ref.read(stageDrawerOpenProvider.notifier).state = false;
-              ref.read(selectedStageIdProvider.notifier).state = null;
+              ref.read(nodeDrawerOpenProvider.notifier).state = false;
+              ref.read(selectedNodeIdProvider.notifier).state = null;
               ref.read(modeProvider.notifier).state = AppMode.active;
             },
           ),
@@ -54,8 +54,8 @@ class ModeRail extends ConsumerWidget {
             label: 'History \u00b7 past jobs',
             active: mode == AppMode.history,
             onTap: () {
-              ref.read(stageDrawerOpenProvider.notifier).state = false;
-              ref.read(selectedStageIdProvider.notifier).state = null;
+              ref.read(nodeDrawerOpenProvider.notifier).state = false;
+              ref.read(selectedNodeIdProvider.notifier).state = null;
               ref.read(modeProvider.notifier).state = AppMode.history;
             },
           ),

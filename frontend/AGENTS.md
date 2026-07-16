@@ -50,28 +50,28 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 
 ## Backend Connectivity (Build mode)
 
-Workflows are read from and written to the Trailhead backend (`/api/v1/workflows/*`).
-The frontend uses **relative URLs only** — in production it's served from the same
-Rust binary as the API (same-origin via rust-embed). No connection configuration
-needed.
+Workflows are read from and written to the THRT backend (`/api/v1/workflows/*`).
+The frontend uses **relative URLs** — in production it is served from the same
+Bun proxy that forwards to THRT. No connection configuration is needed.
 
-The dev preview (`serve.js` Bun server) proxies `/api/*` and `/mcp/*` to the
-backend via the `BACKEND_URL` env var (default `http://host.docker.internal:4050`).
-Override for local dev:
+The dev preview (`serve.js` Bun server) proxies `/api/*` to THRT via the
+`BACKEND_URL` env var (default `http://localhost:8060`). Override for local dev:
 
 ```bash
-BACKEND_URL=http://localhost:4050 bun run serve.js
+BACKEND_URL=http://localhost:8060 bun run serve.js
 ```
 
-iOS native client + hosted backend connection config is a future change.
+Runtime actions (deploy, status, inject) are also sent through the same-origin
+proxy to `/api/v1/workflows/:name/deploy|status|trigger`.
 
 ### Key files
-- `lib/services/workflows_api.dart` — HTTP client for `/workflows/*` endpoints
+- `lib/services/workflows_api.dart` — HTTP client for `/workflows/*` CRUD endpoints
+- `lib/services/thrt_api.dart` — HTTP client for runtime deploy/status/trigger
+- `lib/providers/thrt_provider.dart` — deployed-flow set + polled status map
 - `lib/utils/yaml_to_workflow.dart` — parses stored YAML into canvas model
 - `lib/utils/workflow_to_yaml.dart` — serializes canvas model to YAML
 - `lib/providers/api_provider.dart` — `workflowsApiProvider` (relative URL)
-- `lib/providers/mode_provider.dart` — `remoteWorkflowsProvider` async-fetches + parses
-- `serve.js` — Bun dev preview + API proxy
+- `serve.js` — Bun dev preview + THRT proxy
 
 ### Autosave
 Canvas edits trigger debounced (800ms) `PUT /workflows/{name}` via the autosave
@@ -81,14 +81,13 @@ listener in `lib/main.dart`. The `workflowDirtyProvider` tracks unsaved state.
 
 | Action | Command |
 |--------|---------|
-| Run web dev | `~/flutter/bin/flutter run -d chrome` |
-| Build web release | `~/flutter/bin/flutter build web --release` |
-| Build production release | `../../scripts/build-trailhead.sh` (from `frontend/`) |
-| Run tests | `~/flutter/bin/flutter test` |
-| Analyze | `~/flutter/bin/flutter analyze` |
-| Run iOS build | `~/flutter/bin/flutter build ios --release --no-codesign` (macOS only) |
+| Run web dev | `~/projects/flutter/bin/flutter run -d chrome` |
+| Build web release | `~/projects/flutter/bin/flutter build web --release` |
+| Run tests | `~/projects/flutter/bin/flutter test` |
+| Analyze | `~/projects/flutter/bin/flutter analyze` |
+| Run iOS build | `~/projects/flutter/bin/flutter build ios --release --no-codesign` (macOS only) |
 
-**Agent rule:** After any code change, run `../../scripts/build-trailhead.sh` to build the Flutter frontend + Rust service and print the host deploy commands. For dev-preview-only changes, `~/flutter/bin/flutter build web --release` is enough.
+**Agent rule:** After any code change, run `~/projects/flutter/bin/flutter build web --release` and refresh `trailhead.rancidgrandmas.online`. The Rust build script `scripts/build-trailhead.sh` is no longer used for frontend deployments.
 
 ## iOS Development
 
@@ -96,19 +95,19 @@ See [`ios/README.md`](ios/README.md) for the full iOS build/test/device recipe. 
 
 ## Dev Preview
 
-The Flutter web build is served live at **trailhead-dev.rancidgrandmas.online** via a Bun static server in the apps container.
+The Flutter web build is served live at **trailhead.rancidgrandmas.online** via a Bun static server in the apps container.
 
 **Iterate cycle:**
 ```bash
-~/flutter/bin/flutter build web --release
+~/projects/flutter/bin/flutter build web --release
 # Refresh browser — changes are live
 ```
 
-The dev preview uses **mock backend data** baked into the Flutter build (no API calls). To update mock data, edit `lib/providers/mock_data.dart` and rebuild.
+The dev preview proxies `/api/*` to the THRT runtime (`http://localhost:8060`).
 
-**App config:** `trailhead-ui` app, internal port 8040, directory `/home/gem/projects/CoderyTrailhead/frontend`, command `bun run serve.js`.
+**App config:** `trailhead` app, internal port 8040, directory `/home/gem/projects/CoderyTrailhead/frontend`, command `bun run serve.js`.
 
-**Production** (`trailhead.rancidgrandmas.online`): served by the Rust binary via `rust-embed`. Run `../../scripts/build-trailhead.sh` to build and print the host commands that copy the binary and restart the service.
+**Production** (`trailhead.rancidgrandmas.online`): now served by the same Bun proxy + THRT runtime instead of the Rust binary.
 
 ## Code Style
 
@@ -201,4 +200,4 @@ Theme: **dark** with **slate** variant. Key tokens:
 
 ## Backend
 
-The backend Rust service lives at `crates/trailhead-service/`. The web build output is embedded at compile time via `build.rs`.
+The backend runtime is now **THRT** (`/home/gem/projects/THRT`) — an Elixir service that stores workflow YAML and executes node graphs. The Rust service in `crates/trailhead-service/` has been retired and is preserved for reference only.

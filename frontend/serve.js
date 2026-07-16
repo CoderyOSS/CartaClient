@@ -1,9 +1,7 @@
 const WEB_ROOT = `${import.meta.dir}/build/web`;
 
-// Backend URL for dev-preview API proxying. Defaults to Docker bridge host
-// (apps container -> host trailhead service). Override via env:
-//   BACKEND_URL=http://localhost:4050 bun run serve.js
-const BACKEND_URL = process.env.BACKEND_URL || 'http://host.docker.internal:4050';
+// THRT runtime lives in the same container. Use same-origin proxy.
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8060';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -29,6 +27,16 @@ function ext(path) {
   return dot >= 0 ? path.slice(dot) : '';
 }
 
+const NO_CACHE_EXTS = new Set(['.js', '.mjs', '.wasm', '.data', '.mem']);
+
+function headersForPath(path) {
+  const h = { 'Content-Type': MIME[ext(path)] || 'application/octet-stream' };
+  if (NO_CACHE_EXTS.has(ext(path)) || path.endsWith('/index.html')) {
+    h['Cache-Control'] = 'no-store, max-age=0';
+  }
+  return h;
+}
+
 Bun.serve({
   port: 8040,
   async fetch(req) {
@@ -44,11 +52,27 @@ Bun.serve({
         const init = {
           method: req.method,
           headers: req.headers,
+          compress: false,
         };
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           init.body = await req.text();
         }
-        return await fetch(target, init);
+        const upstream = await fetch(target, init);
+        // Strip hop-by-hop / encoding headers so Bun doesn't double-compress
+        // (which would invalidate the upstream Content-Length and break Caddy).
+        const headers = new Headers();
+        for (const [k, v] of upstream.headers) {
+          const lk = k.toLowerCase();
+          if (lk === 'content-encoding' || lk === 'content-length' || lk === 'transfer-encoding') {
+            continue;
+          }
+          headers.set(k, v);
+        }
+        return new Response(upstream.body, {
+          status: upstream.status,
+          statusText: upstream.statusText,
+          headers,
+        });
       } catch (e) {
         return new Response(`dev proxy error: ${e}`, { status: 502 });
       }
@@ -58,16 +82,12 @@ Bun.serve({
 
     const file = Bun.file(`${WEB_ROOT}${path}`);
     if (await file.exists()) {
-      return new Response(file, {
-        headers: { 'Content-Type': MIME[ext(path)] || 'application/octet-stream' },
-      });
+      return new Response(file, { headers: headersForPath(path) });
     }
 
     const index = Bun.file(`${WEB_ROOT}/index.html`);
     if (await index.exists()) {
-      return new Response(index, {
-        headers: { 'Content-Type': MIME['.html'] },
-      });
+      return new Response(index, { headers: headersForPath('/index.html') });
     }
 
     return new Response('Not Found', { status: 404 });

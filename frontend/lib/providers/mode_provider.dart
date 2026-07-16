@@ -87,11 +87,11 @@ final runsTableViewModeProvider = StateProvider<String>((ref) => 'flat');
 
 final yamlDrawerOpenProvider = StateProvider<bool>((ref) => false);
 
-final stageDrawerOpenProvider = StateProvider<bool>((ref) => false);
+final nodeDrawerOpenProvider = StateProvider<bool>((ref) => false);
 
-final selectedStageIdProvider = StateProvider<String?>((ref) => null);
+final selectedNodeIdProvider = StateProvider<String?>((ref) => null);
 
-final stageDrawerTabProvider = StateProvider<Map<String, String>>((ref) => {});
+final nodeDrawerTabProvider = StateProvider<Map<String, String>>((ref) => {});
 
 /// Per-workflow canvas viewport snapshots. Lazily populated on switch.
 final documentsProvider =

@@ -9,6 +9,7 @@ class NodeContextMenu extends StatelessWidget {
   final VoidCallback onCollapse;
   final VoidCallback onDelete;
   final VoidCallback onInspect;
+  final VoidCallback? onInject;
   final VoidCallback onClose;
 
   NodeContextMenu({
@@ -19,6 +20,7 @@ class NodeContextMenu extends StatelessWidget {
     required this.onCollapse,
     required this.onDelete,
     required this.onInspect,
+    this.onInject,
     required this.onClose,
   });
 
@@ -56,10 +58,17 @@ class NodeContextMenu extends StatelessWidget {
               children: [
                 _MenuItem(
                   icon: TrailheadIconData.settings,
-                  label: 'inspect stage',
-                  desc: 'open stage editor',
+                  label: 'inspect node',
+                  desc: 'open node editor',
                   onTap: onInspect,
                 ),
+                if (onInject != null)
+                  _MenuItem(
+                    icon: TrailheadIconData.play,
+                    label: 'inject payload',
+                    desc: 'send an Elixir term to this node',
+                    onTap: onInject!,
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
                   child: Container(height: 1, color: AppColors.border1),

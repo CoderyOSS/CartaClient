@@ -5,12 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/tokens.dart';
 import '../models/workflow_document.dart';
-import '../models/workflow_node.dart';
 import '../providers/api_provider.dart';
 import '../providers/canvas_controller.dart';
 import '../providers/mode_provider.dart';
 import '../providers/mock_data.dart';
 import '../providers/selection_notifier.dart';
+import '../providers/thrt_provider.dart';
 import '../utils/workflow_to_yaml.dart';
 import 'icons.dart';
 import 'app_button.dart';
@@ -893,7 +893,9 @@ class _BuildBar extends ConsumerWidget {
     final yamlOpen = ref.watch(yamlDrawerOpenProvider);
     final dirty = ref.watch(workflowDirtyProvider);
     final remoteAsync = ref.watch(remoteWorkflowsProvider);
+    final deployedSet = ref.watch(deployedFlowsProvider);
     final isEmpty = wf.id == emptyWorkflowId;
+    final deployed = deployedSet.contains(wf.name);
 
     // Auto-select first remote workflow on initial load.
     ref.watch(autoSelectFirstWorkflowProvider);
@@ -1009,8 +1011,8 @@ class _BuildBar extends ConsumerWidget {
             ref.read(hoveredNodeProvider.notifier).state = null;
             ref.read(draggingNodeIdProvider.notifier).state = null;
             ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-            ref.read(selectedStageIdProvider.notifier).state = null;
-            ref.read(stageDrawerOpenProvider.notifier).state = false;
+            ref.read(selectedNodeIdProvider.notifier).state = null;
+            ref.read(nodeDrawerOpenProvider.notifier).state = false;
             ref.read(workflowDirtyProvider.notifier).state = false;
           },
           onNew: () => _createNewWorkflow(ref),
@@ -1045,8 +1047,20 @@ class _BuildBar extends ConsumerWidget {
           variant: AppButtonVariant.trail,
           size: AppButtonSize.sm,
           icon: TrailheadIconData.play,
-          label: 'launch',
-          onTap: () {},
+          label: deployed ? 'deployed ✓' : 'deploy',
+          onTap: deployed
+              ? null
+              : () async {
+                  try {
+                    final yaml = workflowToYaml(wf);
+                    await ref.read(workflowsApiProvider).replace(wf.name, yaml);
+                    await ref.read(thrtApiProvider).deploy(wf.name);
+                    ref.read(deployedFlowsProvider.notifier).state =
+                        {...ref.read(deployedFlowsProvider), wf.name};
+                  } catch (e) {
+                    debugPrint('deploy failed: $e');
+                  }
+                },
         ),
       ],
     );
@@ -1069,15 +1083,7 @@ class _BuildBar extends ConsumerWidget {
       name: name,
       version: 1,
       updated: 'just now',
-      nodes: const [
-        WorkflowNode(
-          id: 'entrypoint',
-          kind: 'worker',
-          label: 'entrypoint',
-          x: 0,
-          y: -16,
-        ),
-      ],
+      nodes: const [],
     );
     final yaml = workflowToYaml(placeholder);
     try {
@@ -1094,8 +1100,8 @@ class _BuildBar extends ConsumerWidget {
       ref.read(hoveredNodeProvider.notifier).state = null;
       ref.read(draggingNodeIdProvider.notifier).state = null;
       ref.read(dragOffsetProvider.notifier).state = Offset.zero;
-      ref.read(selectedStageIdProvider.notifier).state = null;
-      ref.read(stageDrawerOpenProvider.notifier).state = false;
+      ref.read(selectedNodeIdProvider.notifier).state = null;
+      ref.read(nodeDrawerOpenProvider.notifier).state = false;
       ref.read(workflowDirtyProvider.notifier).state = false;
     } catch (e) {
       // ignore: use_build_context_synchronously

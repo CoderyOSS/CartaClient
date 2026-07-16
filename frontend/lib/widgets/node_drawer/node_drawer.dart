@@ -10,42 +10,42 @@ import 'editor_prompt_tab.dart';
 import 'editor_result_tab.dart';
 import 'job_log_view.dart';
 
-enum StageDrawerView { builder, job }
+enum NodeDrawerView { builder, job }
 
-class StageDrawer extends ConsumerStatefulWidget {
-  final WorkflowNode stage;
-  final StageDrawerView view;
+class NodeDrawer extends ConsumerStatefulWidget {
+  final WorkflowNode node;
+  final NodeDrawerView view;
   final VoidCallback onClose;
   final bool isPortrait;
 
-  StageDrawer({
+  NodeDrawer({
     super.key,
-    required this.stage,
-    this.view = StageDrawerView.builder,
+    required this.node,
+    this.view = NodeDrawerView.builder,
     required this.onClose,
     this.isPortrait = false,
   });
 
   @override
-  ConsumerState<StageDrawer> createState() => _StageDrawerState();
+  ConsumerState<NodeDrawer> createState() => _NodeDrawerState();
 }
 
-class _StageDrawerState extends ConsumerState<StageDrawer> {
+class _NodeDrawerState extends ConsumerState<NodeDrawer> {
   late TextEditingController _labelCtrl;
 
-  String get _tabKey => '${widget.stage.id}_${widget.view.name}';
+  String get _tabKey => '${widget.node.id}_${widget.view.name}';
 
   @override
   void initState() {
     super.initState();
-    _labelCtrl = TextEditingController(text: widget.stage.label);
+    _labelCtrl = TextEditingController(text: widget.node.label);
   }
 
   @override
-  void didUpdateWidget(covariant StageDrawer oldWidget) {
+  void didUpdateWidget(covariant NodeDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.stage.id != widget.stage.id) {
-      _labelCtrl.text = widget.stage.label;
+    if (oldWidget.node.id != widget.node.id) {
+      _labelCtrl.text = widget.node.label;
     }
   }
 
@@ -59,7 +59,7 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
     final wf = ref.read(workflowProvider);
     ref.read(workflowProvider.notifier).state = wf.copyWith(
       nodes: wf.nodes.map((n) {
-        if (n.id == widget.stage.id) {
+        if (n.id == widget.node.id) {
           return n.copyWith(label: value);
         }
         return n;
@@ -69,29 +69,28 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final tabsMap = ref.watch(stageDrawerTabProvider);
+    final tabsMap = ref.watch(nodeDrawerTabProvider);
     final _tab = tabsMap[_tabKey] ?? 'settings';
-    final meta = widget.stage.kind == 'worker'
-        ? 'worker stage'
-        : widget.stage.kind == 'fan'
-            ? 'map \u2014 iterate over a list'
-            : widget.stage.kind == 'branch'
-                ? 'branch \u2014 if/else router'
-                : 'routing operator';
+    final meta = widget.node.kind == 'genserver'
+        ? 'genserver node'
+        : widget.node.kind == 'task'
+            ? 'task node'
+            : widget.node.kind == 'function'
+                ? 'function \u2014 if/else router'
+                : widget.node.kind == 'sink.log'
+                    ? 'log sink node'
+                    : 'node';
 
-    final isWorker = widget.stage.kind == 'worker';
-    final isMap = widget.stage.kind == 'fan';
-    final isBuilder = widget.view == StageDrawerView.builder;
+    final isWorker = widget.node.kind == 'genserver' || widget.node.kind == 'task';
+    final isBuilder = widget.view == NodeDrawerView.builder;
 
     final tabs = isWorker
         ? [
-            _Tab(value: 'settings', label: 'stage'),
+            _Tab(value: 'settings', label: 'node'),
             _Tab(value: 'prompt', label: 'prompt'),
             _Tab(value: 'result', label: 'result'),
           ]
-        : isMap
-            ? [_Tab(value: 'settings', label: 'container')]
-            : [_Tab(value: 'settings', label: 'routing')];
+        : [_Tab(value: 'settings', label: 'routing')];
 
     return Container(
       width: widget.isPortrait ? double.infinity : 460,
@@ -124,11 +123,11 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: (isWorker || isMap)
+                    color: (isWorker)
                         ? AppColors.bg3
                         : AppColors.bg3,
                     border: Border.all(
-                      color: (isWorker || isMap)
+                      color: (isWorker)
                           ? Colors.transparent
                           : AppColors.border3,
                     ),
@@ -138,11 +137,9 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
                   child: TrailheadIcon(
                     icon: isWorker
                         ? TrailheadIconData.zap
-                        : isMap
-                            ? TrailheadIconData.forEach
-                            : TrailheadIconData.gitBranch,
+                        : TrailheadIconData.gitBranch,
                     size: 14,
-                    color: (isWorker || isMap)
+                    color: (isWorker)
                         ? AppColors.accentInk
                         : AppColors.accent,
                   ),
@@ -169,7 +166,7 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${widget.stage.id} \u00b7 $meta${!isBuilder ? " \u00b7 log" : ""}',
+                        '${widget.node.id} \u00b7 $meta${!isBuilder ? " \u00b7 log" : ""}',
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 10.5,
@@ -220,13 +217,13 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
           Expanded(
             child: isBuilder
                 ? (_tab == 'settings'
-                    ? EditorSettingsTab(stage: widget.stage)
+                    ? EditorSettingsTab(node: widget.node)
                     : _tab == 'prompt'
-                        ? EditorPromptTab(stage: widget.stage)
+                        ? EditorPromptTab(node: widget.node)
                         : _tab == 'result'
-                            ? EditorResultTab(stage: widget.stage)
+                            ? EditorResultTab(node: widget.node)
                             : const SizedBox.shrink())
-                : JobLogView(stage: widget.stage),
+                : JobLogView(node: widget.node),
           ),
         ],
       ),
@@ -234,14 +231,14 @@ class _StageDrawerState extends ConsumerState<StageDrawer> {
   }
 
   Widget _buildTab(_Tab t) {
-    final tabsMap = ref.watch(stageDrawerTabProvider);
+    final tabsMap = ref.watch(nodeDrawerTabProvider);
     final tab = tabsMap[_tabKey] ?? 'settings';
     final active = tab == t.value;
     return GestureDetector(
       onTap: () {
         final next = Map<String, String>.from(tabsMap);
         next[_tabKey] = t.value;
-        ref.read(stageDrawerTabProvider.notifier).state = next;
+        ref.read(nodeDrawerTabProvider.notifier).state = next;
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

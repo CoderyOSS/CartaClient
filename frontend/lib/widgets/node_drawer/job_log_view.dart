@@ -4,12 +4,12 @@ import '../../models/workflow_node.dart';
 import '../../providers/mock_data.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
-import 'stage_drawer.dart';
+import 'node_drawer.dart';
 
 class JobLogView extends StatefulWidget {
-  final WorkflowNode stage;
+  final WorkflowNode node;
 
-  JobLogView({super.key, required this.stage});
+  JobLogView({super.key, required this.node});
 
   @override
   State<JobLogView> createState() => _JobLogViewState();
@@ -21,7 +21,7 @@ class _JobLogViewState extends State<JobLogView> {
   @override
   void initState() {
     super.initState();
-    final executions = mockStageExecutions[widget.stage.id] ?? [];
+    final executions = mockStageExecutions[widget.node.id] ?? [];
     if (executions.isNotEmpty) {
       final running = executions.firstWhere(
         (e) => e.status == 'running',
@@ -34,21 +34,21 @@ class _JobLogViewState extends State<JobLogView> {
   @override
   void didUpdateWidget(covariant JobLogView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.stage.id != widget.stage.id) {
-      final executions = mockStageExecutions[widget.stage.id] ?? [];
+    if (oldWidget.node.id != widget.node.id) {
+      final executions = mockStageExecutions[widget.node.id] ?? [];
       _openId = executions.isNotEmpty ? executions.first.id : null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final executions = mockStageExecutions[widget.stage.id] ?? [];
+    final executions = mockStageExecutions[widget.node.id] ?? [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.stage.kind == 'worker')
-          _JobStageHeaderInfo(stage: widget.stage),
+        if (widget.node.kind == 'genserver')
+          _JobStageHeaderInfo(stage: widget.node),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -95,7 +95,7 @@ class _JobLogViewState extends State<JobLogView> {
                     padding: const EdgeInsets.all(20),
                     alignment: Alignment.center,
                     child: Text(
-                      'no executions yet for this stage',
+                      'no executions yet for this node',
                       style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 12,

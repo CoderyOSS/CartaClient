@@ -2,14 +2,14 @@ import '../providers/mock_data.dart';
 
 class YamlResult {
   final String yaml;
-  final Map<String, ({int start, int end})> stageLines;
+  final Map<String, ({int start, int end})> nodeLines;
 
-  const YamlResult({required this.yaml, required this.stageLines});
+  const YamlResult({required this.yaml, required this.nodeLines});
 }
 
 YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
   final buf = StringBuffer();
-  final stageLines = <String, ({int start, int end})>{};
+  final nodeLines = <String, ({int start, int end})>{};
 
   buf.writeln('name: ${workflow.name}');
   buf.writeln('version: ${workflow.version}');
@@ -19,11 +19,11 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
   buf.writeln('');
 
   if (workflow.nodes.isNotEmpty) {
-    buf.writeln('stages:');
+    buf.writeln('nodes:');
     for (final node in workflow.nodes) {
       final startLine = buf.toString().split('\n').length;
-      buf.writeln('  - name: "${node.id}"');
-      buf.writeln('    kind: ${node.kind}');
+      buf.writeln('  - id: "${node.id}"');
+      buf.writeln('    type: ${node.kind}');
       buf.writeln('    label: "${node.label}"');
       if (node.sub != null) buf.writeln('    sub: "${node.sub}"');
       if (node.model != null) buf.writeln('    model: ${node.model}');
@@ -65,8 +65,8 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
         _writeJson(buf, node.schema!, indent: 6);
       }
 
-      // Branch outputs
-      if (node.kind == 'branch') {
+      // Function outputs
+      if (node.kind == 'function') {
         if (node.matchAll) {
           buf.writeln('    match_all: true');
         }
@@ -77,28 +77,6 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
             buf.writeln('        label: "${out.label}"');
             if (out.expression != null && out.expression!.isNotEmpty) {
               buf.writeln('        expression: "${out.expression}"');
-            }
-          }
-        }
-      }
-
-      // Map (fan) fields
-      if (node.kind == 'fan') {
-        if (node.over != null) buf.writeln('    over: ${node.over}');
-        if (node.count != null) buf.writeln('    count: ${node.count}');
-        if (node.concurrency != null) buf.writeln('    concurrency: ${node.concurrency}');
-        if (node.collect != null) buf.writeln('    collect: ${node.collect}');
-        if (node.body != null) {
-          buf.writeln('    body:');
-          buf.writeln('      label: ${node.body!.label}');
-          if (node.body!.model != null) buf.writeln('      model: ${node.body!.model}');
-          if (node.body!.skills.isNotEmpty) {
-            buf.writeln('      skills: [${node.body!.skills.map((s) => '"$s"').join(', ')}]');
-          }
-          if (node.body!.prompt.isNotEmpty) {
-            buf.writeln('      prompt: |');
-            for (final line in node.body!.prompt.split('\n')) {
-              buf.writeln('        $line');
             }
           }
         }
@@ -133,7 +111,7 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
 
       buf.writeln('    pos: {x: ${node.x.toStringAsFixed(0)}, y: ${node.y.toStringAsFixed(0)}}');
       final endLine = buf.toString().split('\n').length - 1;
-      stageLines[node.id] = (start: startLine, end: endLine);
+      nodeLines[node.id] = (start: startLine, end: endLine);
     }
     buf.writeln('');
   }
@@ -149,7 +127,7 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
     }
   }
 
-  return YamlResult(yaml: buf.toString(), stageLines: stageLines);
+  return YamlResult(yaml: buf.toString(), nodeLines: nodeLines);
 }
 
 String workflowToYaml(WorkflowSummary workflow) {

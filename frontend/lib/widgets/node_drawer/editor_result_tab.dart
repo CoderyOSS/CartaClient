@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/workflow_node.dart';
 import '../../providers/mode_provider.dart';
 import '../../theme/tokens.dart';
-import 'stage_drawer.dart';
+import 'node_drawer.dart';
 
 class EditorResultTab extends ConsumerStatefulWidget {
-  final WorkflowNode stage;
+  final WorkflowNode node;
 
-  EditorResultTab({super.key, required this.stage});
+  EditorResultTab({super.key, required this.node});
 
   @override
   ConsumerState<EditorResultTab> createState() => _EditorResultTabState();
@@ -20,14 +20,14 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
   @override
   void initState() {
     super.initState();
-    _format = widget.stage.resultFormat ?? 'json';
+    _format = widget.node.resultFormat ?? 'json';
   }
 
   @override
   void didUpdateWidget(covariant EditorResultTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.stage.id != widget.stage.id) {
-      _format = widget.stage.resultFormat ?? 'json';
+    if (oldWidget.node.id != widget.node.id) {
+      _format = widget.node.resultFormat ?? 'json';
     }
   }
 
@@ -36,7 +36,7 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
     final wf = ref.read(workflowProvider);
     ref.read(workflowProvider.notifier).state = wf.copyWith(
       nodes: wf.nodes.map((n) {
-        if (n.id == widget.stage.id) {
+        if (n.id == widget.node.id) {
           return n.copyWith(resultFormat: format);
         }
         return n;
@@ -46,15 +46,15 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.stage.kind != 'worker') {
+    if (widget.node.kind != 'genserver') {
       return EmptyBlock(
         label: "routing operators don't define a result schema",
       );
     }
 
     final downstream = _format == 'json'
-        ? 'Fields autocomplete in any downstream prompt as {{${widget.stage.id}.<field>}}.'
-        : 'Reference the full text in downstream prompts as {{${widget.stage.id}.text}}.';
+        ? 'Fields autocomplete in any downstream prompt as {{${widget.node.id}.<field>}}.'
+        : 'Reference the full text in downstream prompts as {{${widget.node.id}.text}}.';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -63,7 +63,7 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
         children: [
           Field(
             label: 'result format',
-            hint: 'how this stage\'s output is interpreted',
+            hint: 'how this node\'s output is interpreted',
             child: Container(
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
@@ -89,11 +89,11 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
               ),
             ),
           ),
-          if (_format == 'json' && widget.stage.schema != null)
+          if (_format == 'json' && widget.node.schema != null)
             Field(
               label: 'result schema \u00b7 JSON',
               hint: 'strict \u2014 workers fail-soft on mismatch',
-              child: SchemaEditor(schema: widget.stage.schema!),
+              child: SchemaEditor(schema: widget.node.schema!),
             ),
           Field(
             label: 'downstream usage',

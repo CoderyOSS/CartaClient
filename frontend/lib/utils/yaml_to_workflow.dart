@@ -15,7 +15,8 @@ class WorkflowParseException implements Exception {
 ///
 /// Inverse of [workflowToYaml]. Reads:
 ///   - name (required), version (default 1), draft (optional)
-///   - stages: array of {name, kind, label, pos, ...kind-specific fields}
+///   - nodes: array of {id, type, label, pos, ...kind-specific fields}
+///     (also accepts legacy stages/name/kind keys)
 ///   - edges: array of {from, to, port?}
 ///
 /// Throws [WorkflowParseException] on missing required fields or
@@ -35,25 +36,30 @@ WorkflowSummary yamlToWorkflow(String name, String yamlText) {
   final version = (doc['version'] as int?) ?? 1;
   final draft = doc['draft'] as int?;
 
-  final stagesNode = doc['stages'];
+  // Try nodes (THRT schema) first, fall back to stages (legacy frontend).
+  var nodeList = doc['nodes'];
+  if (nodeList is! YamlList) {
+    nodeList = doc['stages'];
+  }
+
   final nodes = <WorkflowNode>[];
-  if (stagesNode is YamlList) {
-    for (var i = 0; i < stagesNode.length; i++) {
-      final stage = stagesNode[i];
-      if (stage is! YamlMap) {
-        throw WorkflowParseException('stage at index $i is not a mapping');
+  if (nodeList is YamlList) {
+    for (var i = 0; i < nodeList.length; i++) {
+      final item = nodeList[i];
+      if (item is! YamlMap) {
+        throw WorkflowParseException('node at index $i is not a mapping');
       }
-      nodes.add(_parseNode(stage, i));
+      nodes.add(_parseNode(item, i));
     }
-  } else if (stagesNode is YamlMap) {
+  } else if (nodeList is YamlMap) {
     throw WorkflowParseException(
-      'stages is a map — incompatible with frontend schema (array expected). '
+      'nodes is a map — incompatible with frontend schema (array expected). '
       'This workflow uses the scheduler format and cannot be edited on the canvas.',
     );
-  } else if (stagesNode == null) {
-    // Empty workflow with no stages is allowed.
+  } else if (nodeList == null) {
+    // Empty workflow with no nodes is allowed.
   } else {
-    throw WorkflowParseException('unexpected stages shape: ${stagesNode.runtimeType}');
+    throw WorkflowParseException('unexpected nodes shape: ${nodeList.runtimeType}');
   }
 
   final edgesNode = doc['edges'];
@@ -66,23 +72,7 @@ WorkflowSummary yamlToWorkflow(String name, String yamlText) {
     }
   }
 
-  // Entrypoint invariant: every workflow renders with exactly one node whose
-  // id is 'entrypoint'. If the loaded YAML lacks one (e.g. legacy scheduler
-  // format, or hand-edited YAML), prepend a virtual entrypoint. It persists
-  // back to the backend via autosave on the first canvas edit.
-  final hasEntrypoint = nodes.any((n) => n.id == 'entrypoint');
-  if (!hasEntrypoint) {
-    nodes.insert(
-      0,
-      const WorkflowNode(
-        id: 'entrypoint',
-        kind: 'worker',
-        label: 'entrypoint',
-        x: 0,
-        y: -16,
-      ),
-    );
-  }
+  // No entrypoint injection — workflows can start from any node.
 
   return WorkflowSummary(
     id: 'wf_${name.replaceAll(RegExp(r'[^a-z0-9_-]'), '_').toLowerCase()}',
@@ -97,11 +87,11 @@ WorkflowSummary yamlToWorkflow(String name, String yamlText) {
 }
 
 WorkflowNode _parseNode(YamlMap stage, int index) {
-  final id = _toStr(stage['name']);
+  final id = _toStr(stage['id']) ?? _toStr(stage['name']);
   if (id == null || id.isEmpty) {
-    throw WorkflowParseException('stage at index $index missing "name"');
+    throw WorkflowParseException('node at index $index missing "id" (or legacy "name")');
   }
-  final kind = _toStr(stage['kind']) ?? 'worker';
+  final kind = _toStr(stage['type']) ?? _toStr(stage['kind']) ?? 'genserver';
   final label = _toStr(stage['label']) ?? id;
   final sub = stage['sub'] as String?;
   final model = stage['model'] as String?;
@@ -133,7 +123,7 @@ WorkflowNode _parseNode(YamlMap stage, int index) {
   // Kind-specific fields.
   final outputs = <BranchOutput>[];
   var matchAll = false;
-  if (kind == 'branch') {
+  if (kind == 'function' || kind == 'branch') {
     final outsNode = stage['outputs'];
     if (outsNode is YamlList) {
       for (final o in outsNode) {

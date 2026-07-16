@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/workflow_node.dart';
 import '../../providers/mode_provider.dart';
 import '../../theme/tokens.dart';
-import 'stage_drawer.dart';
+import 'node_drawer.dart';
 
 class EditorPromptTab extends ConsumerStatefulWidget {
-  final WorkflowNode stage;
+  final WorkflowNode node;
 
-  EditorPromptTab({super.key, required this.stage});
+  EditorPromptTab({super.key, required this.node});
 
   @override
   ConsumerState<EditorPromptTab> createState() => _EditorPromptTabState();
@@ -20,14 +20,14 @@ class _EditorPromptTabState extends ConsumerState<EditorPromptTab> {
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(text: widget.stage.prompt ?? '');
+    _ctrl = TextEditingController(text: widget.node.prompt ?? '');
   }
 
   @override
   void didUpdateWidget(covariant EditorPromptTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.stage.id != widget.stage.id) {
-      _ctrl.text = widget.stage.prompt ?? '';
+    if (oldWidget.node.id != widget.node.id) {
+      _ctrl.text = widget.node.prompt ?? '';
     }
   }
 
@@ -41,7 +41,7 @@ class _EditorPromptTabState extends ConsumerState<EditorPromptTab> {
     final wf = ref.read(workflowProvider);
     ref.read(workflowProvider.notifier).state = wf.copyWith(
       nodes: wf.nodes.map((n) {
-        if (n.id == widget.stage.id) {
+        if (n.id == widget.node.id) {
           return n.copyWith(prompt: value);
         }
         return n;
@@ -51,12 +51,12 @@ class _EditorPromptTabState extends ConsumerState<EditorPromptTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.stage.prompt == null || widget.stage.prompt!.isEmpty) {
+    if (widget.node.prompt == null || widget.node.prompt!.isEmpty) {
       return EmptyBlock(label: 'no prompt for this routing operator');
     }
 
     final refs = [...RegExp(r'\{\{([^}]+)\}\}')
-        .allMatches(widget.stage.prompt!)
+        .allMatches(widget.node.prompt!)
         .map((m) => m.group(1)!.trim())
         .toSet()];
 
@@ -118,7 +118,7 @@ class _EditorPromptTabState extends ConsumerState<EditorPromptTab> {
                 TextSpan(
                   children: [
                     const TextSpan(
-                      text: 'Reference values from previous stages with ',
+                      text: 'Reference values from previous nodes with ',
                     ),
                     TextSpan(
                       text: '{{stage_id.field}}',

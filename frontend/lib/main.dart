@@ -16,15 +16,15 @@ import 'widgets/canvas/graph_canvas.dart';
 import 'widgets/empty_workflow_hero.dart';
 import 'widgets/runs_table.dart';
 import 'widgets/yaml_drawer.dart';
-import 'widgets/stage_drawer/stage_drawer.dart';
+import 'widgets/node_drawer/node_drawer.dart';
 
 import 'widgets/settings/settings_modal.dart';
 
-final _stageDrawerKeys = <String, GlobalObjectKey>{};
+final _nodeDrawerKeys = <String, GlobalObjectKey>{};
 
-GlobalObjectKey _stageDrawerKey(String stageId, StageDrawerView view) {
-  final keyString = '${stageId}_${view.name}';
-  return _stageDrawerKeys.putIfAbsent(
+GlobalObjectKey _nodeDrawerKey(String nodeId, NodeDrawerView view) {
+  final keyString = '${nodeId}_${view.name}';
+  return _nodeDrawerKeys.putIfAbsent(
     keyString,
     () => GlobalObjectKey(keyString),
   );
@@ -117,8 +117,8 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
     final job = ref.watch(selectedJobProvider);
     final showSidebar = mode != AppMode.build && (mode != AppMode.history || job != null);
     final yamlOpen = mode == AppMode.build && ref.watch(yamlDrawerOpenProvider);
-    final stageOpen = ref.watch(stageDrawerOpenProvider);
-    final stageId = ref.watch(selectedStageIdProvider);
+    final nodeOpen = ref.watch(nodeDrawerOpenProvider);
+    final selectedNodeId = ref.watch(selectedNodeIdProvider);
     final workflow = ref.watch(workflowProvider);
     final settingsOpen = ref.watch(settingsModalOpenProvider);
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
@@ -136,16 +136,16 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
       _scheduleAutosave(next);
     });
 
-    final stageNode = stageId != null
+    final selectedNode = selectedNodeId != null
         ? workflow.nodes.cast<WorkflowNode?>().firstWhere(
-            (n) => n!.id == stageId,
+            (n) => n!.id == selectedNodeId,
             orElse: () => null,
           )
         : null;
 
     final drawerView = (mode == AppMode.active || mode == AppMode.history) && job != null
-        ? StageDrawerView.job
-        : StageDrawerView.builder;
+        ? NodeDrawerView.job
+        : NodeDrawerView.builder;
 
     Widget workflowRegion({Widget? bottomPanel}) {
       return Row(
@@ -172,9 +172,9 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
     }
 
     Widget buildDrawerPanel() {
-      if (!yamlOpen && !stageOpen) return const SizedBox.shrink();
+      if (!yamlOpen && !nodeOpen) return const SizedBox.shrink();
 
-      final showStageDrawer = stageOpen && stageNode != null && mode != AppMode.history;
+      final showNodeDrawer = nodeOpen && selectedNode != null && mode != AppMode.history;
 
       if (isPortrait) {
         return Row(
@@ -190,15 +190,15 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
                   isPortrait: true,
                 ),
               ),
-            if (showStageDrawer)
+            if (showNodeDrawer)
               Expanded(
-                child: StageDrawer(
-                  key: _stageDrawerKey(stageNode.id, drawerView),
-                  stage: stageNode,
+                child: NodeDrawer(
+                  key: _nodeDrawerKey(selectedNode.id, drawerView),
+                  node: selectedNode,
                   view: drawerView,
                   onClose: () {
-                    ref.read(stageDrawerOpenProvider.notifier).state = false;
-                    ref.read(selectedStageIdProvider.notifier).state = null;
+                    ref.read(nodeDrawerOpenProvider.notifier).state = false;
+                    ref.read(selectedNodeIdProvider.notifier).state = null;
                   },
                   isPortrait: true,
                 ),
@@ -218,14 +218,14 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
                   .read(yamlDrawerOpenProvider.notifier)
                   .state = false,
             ),
-          if (showStageDrawer)
-            StageDrawer(
-              key: _stageDrawerKey(stageNode.id, drawerView),
-              stage: stageNode,
+          if (showNodeDrawer)
+            NodeDrawer(
+              key: _nodeDrawerKey(selectedNode.id, drawerView),
+              node: selectedNode,
               view: drawerView,
               onClose: () {
-                ref.read(stageDrawerOpenProvider.notifier).state = false;
-                ref.read(selectedStageIdProvider.notifier).state = null;
+                ref.read(nodeDrawerOpenProvider.notifier).state = false;
+                ref.read(selectedNodeIdProvider.notifier).state = null;
               },
             ),
         ],
@@ -238,7 +238,7 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
           Column(
             children: [
               Expanded(
-                child: isPortrait && (yamlOpen || stageOpen)
+                child: isPortrait && (yamlOpen || nodeOpen)
                     ? workflowRegion(bottomPanel: buildDrawerPanel())
                     : Row(
                         children: [

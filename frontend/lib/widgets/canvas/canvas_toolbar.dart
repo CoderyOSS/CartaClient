@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/workflow_node.dart';
 import '../../providers/canvas_controller.dart';
 import '../../providers/mode_provider.dart';
+import '../../providers/operator_picker_provider.dart';
 import '../../providers/scissors_provider.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/mode_rail.dart';
@@ -95,6 +96,17 @@ class CanvasToolbar extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (editable) ...[
+              toolBtn(
+                onTap: () {
+                  ref.read(operatorPickerProvider.notifier).state = PickerAnchor(
+                    screenPos: Offset(canvasSize.width / 2 - 120, canvasSize.height / 2 - 80),
+                  );
+                },
+                icon: TrailheadIconData.plus,
+                active: false,
+                tooltip: 'Add node to canvas',
+              ),
+              const SizedBox(height: 2),
               toolBtn(
                 onTap: () {
                   ref.read(scissorsModeProvider.notifier).state = false;

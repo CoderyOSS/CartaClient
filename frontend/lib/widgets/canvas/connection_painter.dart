@@ -39,30 +39,24 @@ class ConnectionPainter extends CustomPainter {
 
   Offset _exitPoint(WorkflowNode node, WorkflowEdge edge) {
     final pos = _nodePos(node);
-    return switch (node.kind) {
-      'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-      'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-      _        => _branchExitPoint(node, pos, edge.sourcePort),
-    };
+    if (node.kind == 'function' && node.outputs.isNotEmpty) {
+      return _branchExitPoint(node, pos, edge.sourcePort);
+    }
+    return Offset(pos.dx + node.width, pos.dy + node.height / 2);
   }
 
   Offset _entryPoint(WorkflowNode node) {
     final pos = _nodePos(node);
-    return switch (node.kind) {
-      'worker' => Offset(pos.dx, pos.dy + node.height / 2),
-      'fan'    => Offset(pos.dx, pos.dy + node.height / 2),
-      _        => Offset(pos.dx, pos.dy + node.height / 2),
-    };
+    return Offset(pos.dx, pos.dy + node.height / 2);
   }
 
   Offset _handlePoint(WorkflowNode node, bool isOutput, int? port) {
     final pos = _nodePos(node);
     if (isOutput) {
-      return switch (node.kind) {
-        'worker' => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-        'fan'    => Offset(pos.dx + node.width, pos.dy + node.height / 2),
-        _        => _branchExitPoint(node, pos, port),
-      };
+      if (node.kind == 'function' && node.outputs.isNotEmpty) {
+        return _branchExitPoint(node, pos, port);
+      }
+      return Offset(pos.dx + node.width, pos.dy + node.height / 2);
     }
     return Offset(pos.dx, pos.dy + node.height / 2);
   }

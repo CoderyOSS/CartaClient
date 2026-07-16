@@ -101,13 +101,13 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
     final sizeLabel = byteSize < 1024 ? '$byteSize B' : '${(byteSize / 1024).toStringAsFixed(1)} kB';
     final isJob = widget.job != null;
     final search = _searchController.text.trim().toLowerCase();
-    final selectedStageId = ref.watch(selectedStageIdProvider);
+    final selectedNodeId = ref.watch(selectedNodeIdProvider);
 
     // Offset stage lines when job preface is present
     final prefaceOffset = isJob
         ? _jobPreface(widget.job!).split('\n').length + 1
         : 0;
-    final stageLines = yamlResult.stageLines.map((k, v) => MapEntry(
+    final nodeLines = yamlResult.nodeLines.map((k, v) => MapEntry(
           k,
           (start: v.start + prefaceOffset, end: v.end + prefaceOffset),
         ));
@@ -314,8 +314,8 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
                             i + 1,
                             lines[i],
                             search,
-                            stageLines,
-                            selectedStageId,
+                            nodeLines,
+                            selectedNodeId,
                           ),
                       ],
                     ),
@@ -345,7 +345,7 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
                   child: Text(
                     isJob
                         ? 'the canvas compiled this \u2014 rerun to change it'
-                        : 'the canvas compiles this \u2014 edit stages to change it',
+                        : 'the canvas compiles this \u2014 edit nodes to change it',
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 10.5,
@@ -365,26 +365,26 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
     int lineNum,
     String raw,
     String query,
-    Map<String, ({int start, int end})> stageLines,
-    String? selectedStageId,
+    Map<String, ({int start, int end})> nodeLines,
+    String? selectedNodeId,
   ) {
     final hit = query.isNotEmpty && raw.toLowerCase().contains(query);
 
-    // Find if this line belongs to a stage
-    String? stageIdForLine;
-    for (final entry in stageLines.entries) {
+    // Find if this line belongs to a node
+    String? nodeIdForLine;
+    for (final entry in nodeLines.entries) {
       if (lineNum >= entry.value.start && lineNum <= entry.value.end) {
-        stageIdForLine = entry.key;
+        nodeIdForLine = entry.key;
         break;
       }
     }
-    final isStageLine = stageIdForLine != null;
-    final isSelectedStage = stageIdForLine == selectedStageId;
+    final isNodeLine = nodeIdForLine != null;
+    final isSelectedNode = nodeIdForLine == selectedNodeId;
 
     Color hitBg;
     if (hit) {
       hitBg = AppColors.accent.withValues(alpha: 0.14);
-    } else if (isSelectedStage) {
+    } else if (isSelectedNode) {
       hitBg = AppColors.accent.withValues(alpha: 0.08);
     } else {
       hitBg = Colors.transparent;
@@ -395,7 +395,7 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Gutter with stage button
+          // Gutter with node button
           Container(
             width: 64,
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
@@ -403,11 +403,11 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isStageLine && raw.trimLeft().startsWith('- name:'))
+                if (isNodeLine && raw.trimLeft().startsWith('- id:'))
                   GestureDetector(
                     onTap: () {
-                      ref.read(selectedStageIdProvider.notifier).state = stageIdForLine;
-                      ref.read(stageDrawerOpenProvider.notifier).state = true;
+                      ref.read(selectedNodeIdProvider.notifier).state = nodeIdForLine;
+                      ref.read(nodeDrawerOpenProvider.notifier).state = true;
                     },
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
@@ -416,7 +416,7 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
                         height: 18,
                         margin: const EdgeInsets.only(right: 4),
                         decoration: BoxDecoration(
-                          color: isSelectedStage
+                          color: isSelectedNode
                               ? AppColors.accent.withValues(alpha: 0.2)
                               : AppColors.bg3,
                           borderRadius: BorderRadius.circular(4),
@@ -425,7 +425,7 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
                         child: TrailheadIcon(
                           icon: TrailheadIconData.settings,
                           size: 10,
-                          color: isSelectedStage ? AppColors.accent : AppColors.fg3,
+                          color: isSelectedNode ? AppColors.accent : AppColors.fg3,
                         ),
                       ),
                     ),

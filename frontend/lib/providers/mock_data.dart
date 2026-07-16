@@ -288,25 +288,6 @@ final mockJobs = <JobSummary>[
 const historyCount = 13;
 
 final Map<String, List<StageExecution>> mockStageExecutions = {
-  'entrypoint': [
-    StageExecution(
-      id: 'ex_1',
-      label: 'entrypoint',
-      status: 'passed',
-      startedAt: '14:18:02',
-      durMs: 4200,
-      tokens: 1842,
-      renderedPrompt: 'You are a helpful code reviewer. Review the following pull request and identify potential issues.\n\nPR title: "Fix authentication bypass"\nPR description: "This PR fixes the auth bypass issue reported in #1427"\n\nFocus on: correctness, performance, security, and style.',
-      result: {
-        'summary': 'Found 3 issues: potential null pointer, missing input validation, and hardcoded secret.',
-        'issues': [
-          {'severity': 'high', 'line': 42, 'message': 'Null pointer when user is not authenticated'},
-          {'severity': 'medium', 'line': 78, 'message': 'Input not sanitized before SQL query'},
-          {'severity': 'low', 'line': 156, 'message': 'Hardcoded API key'},
-        ],
-      },
-    ),
-  ],
   'commenter': [
     StageExecution(
       id: 'ex_2',

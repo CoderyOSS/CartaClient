@@ -56,7 +56,7 @@ class OperatorPicker extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'ADD NEXT STAGE',
+                          'ADD NODE',
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 10,
@@ -105,9 +105,10 @@ class OperatorPicker extends StatelessWidget {
 }
 
 enum OperatorType {
-  worker(kind: 'worker', label: 'worker', desc: 'skills \u00b7 prompt \u00b7 result', icon: TrailheadIconData.zap),
-  branch(kind: 'branch', label: 'branch', desc: 'conditional routing', icon: TrailheadIconData.gitBranch),
-  fan(kind: 'fan', label: 'fan', desc: 'fan-out a list, fan-in results', icon: TrailheadIconData.forEach);
+  genserver(kind: 'genserver', label: 'genserver', desc: 'stateful \u00b7 module or inline', icon: TrailheadIconData.zap),
+  task(kind: 'task', label: 'task', desc: 'stateless \u00b7 concurrent \u00b7 elixir expr', icon: TrailheadIconData.zap),
+  function(kind: 'function', label: 'function', desc: 'conditional routing', icon: TrailheadIconData.gitBranch),
+  sinkLog(kind: 'sink.log', label: 'sink.log', desc: 'write messages to the log', icon: TrailheadIconData.zap);
 
   const OperatorType({
     required this.kind,
@@ -138,7 +139,8 @@ class _OperatorRowState extends State<_OperatorRow> {
 
   @override
   Widget build(BuildContext context) {
-    final isWorker = widget.type == OperatorType.worker;
+    final isPrimary =
+        widget.type == OperatorType.genserver || widget.type == OperatorType.task;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -156,7 +158,7 @@ class _OperatorRowState extends State<_OperatorRow> {
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: isWorker
+                  color: isPrimary
                       ? AppColors.accent.withValues(alpha: 0.14)
                       : AppColors.bg3,
                   border: Border.all(color: AppColors.border2),
@@ -166,7 +168,7 @@ class _OperatorRowState extends State<_OperatorRow> {
                   child: TrailheadIcon(
                     icon: widget.type.icon,
                     size: 11,
-                    color: isWorker ? AppColors.accent : AppColors.fg2,
+                    color: isPrimary ? AppColors.accent : AppColors.fg2,
                   ),
                 ),
               ),

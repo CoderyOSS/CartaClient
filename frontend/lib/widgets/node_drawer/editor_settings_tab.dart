@@ -6,12 +6,12 @@ import '../../models/workflow_node.dart';
 import '../../providers/mode_provider.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
-import 'stage_drawer.dart';
+import 'node_drawer.dart';
 
 class EditorSettingsTab extends ConsumerStatefulWidget {
-  final WorkflowNode stage;
+  final WorkflowNode node;
 
-  EditorSettingsTab({super.key, required this.stage});
+  EditorSettingsTab({super.key, required this.node});
 
   @override
   ConsumerState<EditorSettingsTab> createState() => _EditorSettingsTabState();
@@ -29,13 +29,13 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
   @override
   void initState() {
     super.initState();
-    _timeoutCtrl = TextEditingController(text: widget.stage.timeout ?? '120s');
-    _retriesCtrl = TextEditingController(text: widget.stage.retries?.toString() ?? '2');
-    _parallelismCtrl = TextEditingController(text: widget.stage.parallelism?.toString() ?? '4');
-    _labelCtrl = TextEditingController(text: widget.stage.label);
-    _overCtrl = TextEditingController(text: widget.stage.over ?? 'files');
-    _countCtrl = TextEditingController(text: widget.stage.count?.toString() ?? '8');
-    _concurrencyCtrl = TextEditingController(text: widget.stage.concurrency?.toString() ?? '3');
+    _timeoutCtrl = TextEditingController(text: widget.node.timeout ?? '120s');
+    _retriesCtrl = TextEditingController(text: widget.node.retries?.toString() ?? '2');
+    _parallelismCtrl = TextEditingController(text: widget.node.parallelism?.toString() ?? '4');
+    _labelCtrl = TextEditingController(text: widget.node.label);
+    _overCtrl = TextEditingController(text: widget.node.over ?? 'files');
+    _countCtrl = TextEditingController(text: widget.node.count?.toString() ?? '8');
+    _concurrencyCtrl = TextEditingController(text: widget.node.concurrency?.toString() ?? '3');
   }
 
   @override
@@ -59,10 +59,9 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final node = widget.stage;
-    final isWorker = node.kind == 'worker';
-    final isBranch = node.kind == 'branch';
-    final isMap = node.kind == 'fan';
+    final node = widget.node;
+    final isWorker = node.kind == 'genserver';
+    final isBranch = node.kind == 'function';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -70,7 +69,7 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Field(
-            label: 'stage id',
+            label: 'node id',
             child: PreBlock(value: node.id),
           ),
 
@@ -127,9 +126,7 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
               configs: node.configs,
               onUpdate: (c) => _updateNode(node.copyWith(configs: c)),
             ),
-          ],
-
-          if (isBranch) ...[
+          ] else if (isBranch) ...[
             _BranchOutputsEditor(
               outputs: node.outputs,
               matchAll: node.matchAll,
@@ -153,9 +150,7 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
                 );
               },
             ),
-          ],
-
-          if (isMap) ...[
+          ] else ...[
             Field(
               label: 'label',
               child: _TextInput(

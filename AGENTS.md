@@ -1,3 +1,11 @@
+> **PROJECT PURPOSE:**
+> Production-grade, node-based workflow engine for both developer environments and production server operation at scale. Powered by Elixir for resilience, reliability, scalability, and limitless concurrency. Inspired by Node-RED, but with serious engineering might at its core.
+>
+> **Use cases:**
+> - Visually arrange logic to power anything that runs Elixir: factory automation, web apps, home automation, device orchestration.
+> - ---
+> - *(AI harness nodes and MCP integration — deferred. See roadmap below.)*
+
 # Trailhead Service - Agent Guide
 
 ## Project Layout
@@ -15,7 +23,18 @@ CoderyTrailhead/
 └── containers/worker/              ← Worker container image (Docker provider default)
 ```
 
-For frontend work, read `frontend/AGENTS.md`. For backend work, read `crates/trailhead-service/AGENTS.md`.
+For frontend work, read `frontend/AGENTS.md`. For the runtime backend, read `/home/gem/projects/THRT/AGENTS.md`.
+
+## Runtime Architecture
+
+The runtime engine is **THRT** (`/home/gem/projects/THRT`), an Elixir service
+that stores workflow YAML and executes node graphs. The Flutter frontend at
+`trailhead.rancidgrandmas.online` is served by a Bun proxy that forwards
+`/api/*` to THRT.
+
+The earlier Rust prototype (`crates/trailhead-service/`) is preserved for
+reference only — its job/worker lifecycle, Docker provider, and MCP server
+are not part of the active architecture.
 
 ## Knowledge Graph (graphify)
 
@@ -52,392 +71,230 @@ When asked to implement UI features, **ALWAYS work in `frontend/`**. The `design
 files look similar (Canvas, WorkerNode, GraphCanvas) but are **NOT** the source of
 truth. They are a reference for design direction only.
 
-## Purpose
-
-Trailhead Service = AI workflow orchestration. Runs multi-stage LLM workflows across ephemeral worker containers. Workers code on USER projects, not Trailhead itself.
-
 ## Agent Environment Setup
 
-**Critical:** Trailhead runs on the **host machine**, not inside this container. Access via:
-- MCP: `trailhead` server at `http://host.docker.internal:4050/mcp/sse`
-- API: `http://host.docker.internal:4050/api/v1/*`
+**Critical:** Trailhead runs in the **apps container**, not on the host machine.
+Access via:
 
-**MCP Tools Available:**
-- `jobs_create` / `jobs_list` / `jobs_cancel` / `jobs_pause` / `jobs_resume` / `jobs_retry` / `jobs_attach` / `jobs_detach`
-- `workers_list` / `workers_destroy`
-- `projects_list` / `projects_add`
-- `workflows_list` / `workflows_show`
-- `secrets_list` / `secrets_set` / `secrets_delete`
+- Web UI: `https://trailhead.rancidgrandmas.online/`
+- API: `https://trailhead.rancidgrandmas.online/api/v1/*` (proxied to THRT)
+- THRT direct: `https://thrt.rancidgrandmas.online/`
 
-**Event-Driven Scheduling (v0.1.0+):** Jobs launch **instantly** on creation via `tokio::sync::watch` channel. No 30s polling delay.
+THRT is managed as a Launchy app named `thrt` on internal port `8060`. The
+`trailhead` Launchy app serves the Flutter build with a Bun proxy to THRT.
 
 ## Architecture
 
 ```
-Trailhead (Rust, runs on host)
-├── Scheduler  : event-driven job scheduling, spawns workers via Docker
-├── Database   : SQLite (jobs, workflows, workers, checkpoints)
-├── MCP Server : exposes tools for IDE integration
-└── Web API    : REST endpoints for external control
+Trailhead Flutter (apps container, port 8040)
+├── Bun static server + /api/* proxy
+└── serves build/web
 
-Worker Container (opencode-ai)
-├── project directory bind-mounted at /workspace
-├── Runs workflow stages via opencode
-├── Scheduler drives completion (not the worker)
-└── Destroyed when done
+THRT (apps container, port 8060)
+├── Store          : YAML persistence in THRT/flows/
+├── Engine         : deploy / undeploy flow supervisors
+├── Api            : CRUD + runtime HTTP endpoints
+└── Nodes          : task, genserver
 ```
+
+**Deployment modes:**
+- **Web (current)**: Flutter SPA → Bun proxy (same-origin) → THRT. No CORS needed.
+- **Native iOS (planned)**: Flutter app → THRT directly (like MongoDB Compass → remote DB). Requires CORS on THRT.
 
 ## Core Data Model
 
-**Job**: Single workflow execution
-- `project_id`: which repo to work on
-- `workflow_name`: which workflow YAML to run
-- `status`: queued → running → completed/failed/cancelled
-- `project_path`: host path to the git project, bind-mounted into worker at `/workspace`
-- `current_stage`: which step we're on
-- `attempt`: retry counter (max_attempts=3)
-
-**Workflow**: Multi-stage YAML definition
+**Workflow**: Node graph YAML definition
 ```yaml
-name: my-workflow
-stages:
-  - name: analyze
-    prompt: "Read the code and report bugs"
-  - name: fix
-    prompt: "Fix the bugs you found"
+name: my-flow
+nodes:
+  - id: a
+    type: task
+    config:
+      expr: "Map.put(payload, :count, Map.get(payload, :count, 0) + 1)"
+edges:
+  - from: a
+    to: b
 ```
 
-**Worker**: One worker instance per stage execution (see Worker Lifecycle below)
-- `provider`: which WorkerProvider backend created it (see Worker Providers)
-- `status`: creating → running → destroying
-- `project_path`: host project path mounted at `/workspace`
-- `job_id`: links back to job
+**Flow runtime**: A deployed workflow becomes a supervised tree of per-node
+`THRT.Node.Server` processes. Messages are routed along edges.
 
-## Worker Lifecycle
-
-**One worker per stage.** Scheduler spawns a fresh worker for each stage
-execution, runs the stage prompt, then destroys the worker (`scheduler.rs:586`).
-The next stage triggers a new worker on the next scheduling tick.
-
-- Filesystem state persists across stages via the host project bind-mount
-  (`project_path` → `/workspace`).
-- In-memory state, installed packages, and opencode sessions do NOT carry
-  between stages — each stage starts from clean context.
-- Stage outputs (text, commit SHAs, changed files) are persisted in the job's
-  `stage_history` column so template variables like `{{stages.foo.output}}`
-  resolve in later stages.
-- Cross-stage continuity is by filesystem + DB only, never by worker process
-  lifetime.
+*(Job/Worker lifecycle from the Rust prototype is not re-implemented in THRT.)*
 
 ## Worker Providers
 
-Pluggable backends implementing the `WorkerProvider` trait
-(`crates/trailhead-service/src/provider/mod.rs`). One sandbox/pod/process =
-one stage execution (per Worker Lifecycle above).
-
-| Provider  | Status         | Module                       | Notes                                                                       |
-|-----------|----------------|------------------------------|-----------------------------------------------------------------------------|
-| Docker    | Active         | `provider/docker.rs`         | Default; uses bollard; bind-mounts `project_path`                           |
-| Daytona   | In development | planned `provider/daytona.rs`| Cloud VM sandboxes via Daytona REST API; project content delivered via git |
-| MicroK8s  | In development | planned `provider/microk8s.rs`| Kubernetes pods via kube-rs; MicroK8s is the reference/supported distro    |
-| localhost | In development | planned `provider/local.rs`  | Host child processes; no OS-level sandboxing in Phase 1                     |
-
-Provider is selected at daemon startup via the `--worker-provider` CLI flag or
-the `worker_provider` key in `trailhead.toml`. Single provider per daemon
-instance (not per-job). See
-`openspec/changes/multi-provider-workers/design.md` for the in-development
-Daytona / MicroK8s / localhost providers.
+> **Planned module.** Work containers (Docker, Daytona VMs, MicroK8s pods,
+> localhost processes) for isolated stage execution. Not yet implemented in THRT.
+> Design reference: `openspec/changes/multi-provider-workers/design.md`.
 
 ## Feature Status
 
 ### Implemented (✅)
-- Job CRUD via REST API and MCP
-- Docker worker spawning/cleanup
-- SQLite persistence
-- Workflow YAML parser
-- MCP tool server
-- Per-job project_path override
-- Job state transitions (pause/resume/cancel/retry)
-- Automatic retry with backoff for failed_retryable jobs
-- Worker listing/destruction
-- Project management
-
-### Partial (⚠️)
-- IDE attachment: SSH adapter exists, limited testing
-- Checkpoint system: schema exists, not fully wired to scheduler
-- SSE events: endpoint returns empty stream
+- Workflow CRUD via REST API
+- THRT YAML parser + node graph execution
+- Workflow YAML storage in THRT
 
 ### Planned (🚧)
+- Job/worker lifecycle re-implementation on THRT
 - Human-in-the-loop approvals between stages
 - Real SSE event streaming
 - Token usage tracking
+- Native iOS client with direct THRT connection
 
 ## API Endpoints
 
 ```
-GET  /api/v1/jobs              - list jobs
-GET  /api/v1/version           - get service version
-POST /api/v1/jobs              - create job {project_id, description, workflow?, branch?, project_path?}
-GET  /api/v1/jobs/{id}         - job details
-POST /api/v1/jobs/{id}/pause   - pause job
-POST /api/v1/jobs/{id}/resume  - resume job
-POST /api/v1/jobs/{id}/cancel  - cancel job
-POST /api/v1/jobs/{id}/retry   - retry a failed_retryable job
-POST /api/v1/jobs/{id}/attach  - attach IDE {ide?: string}
-
-GET  /api/v1/workers           - list workers
-POST /api/v1/workers/{id}/destroy
-
-GET  /api/v1/projects          - list projects
-POST /api/v1/projects          - add project {repo_url, branch?}
-
-GET  /api/v1/workflows         - list workflows (all rows)
-GET  /api/v1/workflows/{name}  - get workflow content + metadata
-POST /api/v1/workflows         - create workflow {name, content} (upsert)
-PUT  /api/v1/workflows/{name}  - replace workflow content {content}
-DELETE /api/v1/workflows/{name} - delete workflow (idempotent)
-POST /api/v1/workflows/import  - batch import {files: [{name, content}]}
-POST /api/v1/workflows/validate - parse check {content} (scheduler schema)
+GET    /api/v1/workflows                 - list workflows
+POST   /api/v1/workflows                 - create workflow {name, content}
+GET    /api/v1/workflows/{name}          - get workflow content + metadata
+PUT    /api/v1/workflows/{name}          - replace workflow content {content}
+DELETE /api/v1/workflows/{name}          - delete workflow
+POST   /api/v1/workflows/{name}/deploy   - deploy flow to runtime
+DELETE /api/v1/workflows/{name}/deploy   - undeploy flow
+GET    /api/v1/workflows/{name}/status   - runtime node status
+POST   /api/v1/workflows/{name}/trigger  - inject message {node_id, payload}
 ```
 
-## MCP Tools
+## MCP Integration
 
-```
-jobs_list()           - list all jobs
-jobs_create(params)   - create job {project_id, description, workflow?}
-jobs_cancel(id)       - cancel job
-jobs_pause(id)        - pause job
-jobs_resume(id)       - resume job
-jobs_retry(id)        - retry a failed_retryable job (also auto-retried by scheduler)
-jobs_attach(params)   - attach IDE {job_id, ide?}
-jobs_detach(id)       - detach
-
-workers_list()        - list workers
-workers_destroy(id)   - destroy worker
-
-projects_list()       - list projects
-projects_add(params)  - add project {name, repo, branch?}
-
-workflows_list()      - list workflow names
-workflows_show(name)  - show workflow YAML content
-workflows_create(params) - create/replace workflow {name, content}
-workflows_replace(params) - replace workflow content {name, content} (alias of create)
-workflows_delete(name)- delete workflow (idempotent)
-workflows_import(params) - batch import {files: [{name, content}]}
-
-secrets_list()        - list secrets in /opt/codery/secrets
-secrets_set(params)   - set secret {name, value}
-secrets_delete(name)  - delete secret
-
-submit_result(params) - mark job complete {job_id, stage, output} (scheduler-driven; workers do not call this)
-```
-
-MCP server runs at `/mcp/sse`.
+Deferred. See roadmap.
 
 ## Configuration
 
-**Environment:**
-- `TRAILHEAD_DB`: SQLite path (default: `/opt/codery/trailhead.db`)
-- `PROJECT_BASE`: default project root base (default: `/opt/codery/workspaces`, also reads legacy `WORKSPACE_BASE`)
-- `RETRY_DELAY_SECS`: base retry delay in seconds per attempt (default: `30`)
-
-**Config file:** `/opt/codery/trailhead/trailhead.toml`
-```toml
-model = "deepseek/deepseek-v4-flash"
-
-[provider.deepseek]
-api = "deepseek"
-env = ["DEEPSEEK_API_KEY"]
-base_url = "https://api.deepseek.com/v1"
-```
-
-**Per-job project path:**
-```json
-POST /api/v1/jobs
-{
-  "project_id": "xxx",
-  "description": "test job",
-  "project_path": "/home/gem/projects/Unbought"
-}
-```
-If set, the project directory is bind-mounted directly. Otherwise: `{PROJECT_BASE}/{project_id}`. The caller is responsible for having the directory in the desired state before creating the job — the scheduler does no git operations on the host.
+**THRT Environment:**
+- `PORT`: HTTP port (default `4000`; Launchy sets `8060`)
+- `FLOWS_DIR`: directory for persisted workflow YAML (default `./flows`)
+- `HOME`: must be `/home/gem/projects` so the Erlang cookie is found
 
 ## Active Changes
 
-- **multi-provider-workers**: `openspec/changes/multi-provider-workers/` — adds
-  Daytona VM, MicroK8s pod, and localhost process providers alongside the existing
-  Docker provider. See `design.md` for integration details.
+*None currently.*
 
 ## Recently Landed
 
-- **DB-only workflows + frontend YAML integration (v0.4.0)**: Removed
-  `seed_builtin_workflows()` and `/opt/codery/trailhead/workflows/` disk
-  sync. Workflows live only in SQL, mutable, opaque content (no scheduler
-  parser validation on save). New endpoints: `GET/PUT/DELETE
-  /workflows/{name}`, `POST /workflows/import`. CLI: `trailhead-service
-  workflows <list|show|import|delete>`. Frontend Build mode reads/writes
-  workflows via API with debounced autosave.
+- **THRT runtime + same-origin proxy (2026-07-15)**: Retired Rust backend.
+  Active runtime is now THRT (`/home/gem/projects/THRT`). Frontend served by
+  Bun proxy at `trailhead.rancidgrandmas.online`, forwarding `/api/*` to
+  THRT on `localhost:8060`. Added Deploy button, Inject dialog, and node
+  status badges.
 
 ## Deployment
 
-Service runs on **host machine**, not in containers. Managed by supervisord:
+THRT and the Flutter frontend both run inside the **apps container** as Launchy
+apps. They are not managed by the host supervisor.
 
-```ini
-[program:trailhead]
-command=/opt/codery/trailhead/bin/current daemon --db /opt/codery/trailhead.db --config /opt/codery/trailhead/trailhead.toml
-user=root
-autostart=true
-autorestart=true
-stdout_logfile=/var/log/supervisor/trailhead.log
-```
+| App | Subdomain | Internal Port | Directory | Command |
+|-----|-----------|---------------|-----------|---------|
+| `thrt` | `thrt.rancidgrandmas.online` | 8060 | `/home/gem/projects/THRT` | `elixir --sname thrt -S mix run --no-halt` |
+| `trailhead` | `trailhead.rancidgrandmas.online` | 8040 | `/home/gem/projects/CoderyTrailhead/frontend` | `bun run serve.js` |
 
-Binary installed to `/opt/codery/trailhead/bin/` with `current` symlink pointing to the active version.
+To pick up code changes:
 
-To build a new release and print the host deploy commands, run:
+1. `cd /home/gem/projects/THRT && mix compile`
+2. Restart the `thrt` Launchy app (`remove_app` + `add_app`).
+3. `cd /home/gem/projects/CoderyTrailhead/frontend && ~/projects/flutter/bin/flutter build web --release`
+4. Restart the `trailhead` Launchy app.
 
-```bash
-./scripts/build-trailhead.sh
-```
+## Store Schema
 
-The script runs the Flutter and Rust builds on the apps container, then prints
-the commands to copy the binary and restart the service on the host.
+THRT persists workflows as individual YAML files in `THRT/flows/` (configured by
+`FLOWS_DIR`). Each file is named `{name}.yaml`.
 
-Logs: `/var/log/supervisor/trailhead.log`.
+Metadata returned by the CRUD API:
+- `name`: workflow name
+- `content`: raw YAML string
+- `content_hash`: SHA-256 hash of content (for change detection)
+- `updated_at`: file mtime in ISO-8601 UTC
 
-Port 4050 firewall-opened for Docker bridge network (172.16.0.0/12).
-
-## Database Schema
-
-**Key columns:**
-- `jobs.project_path`: per-job project directory override (bind-mounted into worker)
-- `workers.project_path`: project path used by this worker
-- `workflows.content_hash`: for change detection
-- `checkpoints.commit_message`: for git commits
-
-**Migrations:** Executed individually to handle existing columns:
-```rust
-const MIGRATIONS: &[&str] = &[
-    "ALTER TABLE workflows ADD COLUMN content_hash TEXT",
-    "ALTER TABLE checkpoints ADD COLUMN commit_message TEXT DEFAULT ''",
-    "ALTER TABLE jobs ADD COLUMN workspace_path TEXT",
-    "ALTER TABLE workers ADD COLUMN workspace_path TEXT",
-    "ALTER TABLE projects ADD COLUMN name TEXT DEFAULT ''",
-    "ALTER TABLE jobs RENAME COLUMN workspace_path TO project_path",
-    "ALTER TABLE workers RENAME COLUMN workspace_path TO project_path",
-];
-```
+Runtime counters are stored in an in-memory ETS table (`:thrt_stats`) keyed by
+`{flow_id, node_id}`.
 
 ## Common Tasks
 
-**Create job with explicit project path:**
+**Deploy a workflow and inject a test message:**
 ```bash
-curl -X POST http://localhost:4050/api/v1/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "test-project",
-    "description": "Fix bug in authentication",
-    "workflow": "bugfix",
-    "project_path": "/home/gem/projects/Unbought"
-  }'
-```
+# create
+bash -c 'cat <<EOF > /tmp/flow.json
+{"name":"hello-world","content":"name: hello-world\nnodes:\n  - id: a\n    type: task\n    config:\n      expr: \"Map.put(payload, :greeted, true)\"\nedges: []\n"}'
+curl -s -X POST https://trailhead.rancidgrandmas.online/api/v1/workflows \
+  -H "Content-Type: application/json" -d @/tmp/flow.json
 
-**Retry stuck failed_retryable jobs:**
-```bash
-curl -X POST http://localhost:4050/api/v1/jobs/<job-id>/retry
-```
+# deploy
+curl -s -X POST https://trailhead.rancidgrandmas.online/api/v1/workflows/hello-world/deploy
 
-**List running jobs:**
-```bash
-trailhead-service jobs list --status running
-```
+# status
+curl -s https://trailhead.rancidgrandmas.online/api/v1/workflows/hello-world/status
 
-**Destroy stuck worker:**
-```bash
-trailhead-service workers destroy <worker-id>
-```
-
-**Add workflow via API:**
-```bash
-curl -X POST http://localhost:4050/api/v1/workflows \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "hello-world",
-    "content": "name: hello-world\nstages:\n  - name: greet\n    prompt: \"Say hello\""
-  }'
+# inject
+curl -s -X POST https://trailhead.rancidgrandmas.online/api/v1/workflows/hello-world/trigger \
+  -H "Content-Type: application/json" -d '{"node_id":"a","payload":{"hello":"world"}}'
 ```
 
 **Import workflows from disk (one-time bootstrap or batch load):**
 ```bash
-trailhead-service workflows import /path/to/yaml/dir
-trailhead-service workflows list
-trailhead-service workflows show hello-world
-trailhead-service workflows delete old-workflow
+# THRT.Store expects one YAML file per workflow in FLOWS_DIR.
+cp /path/to/yaml/dir/*.yml /home/gem/projects/THRT/flows/
 ```
-Workflows live in SQL only — disk files are not watched or auto-seeded.
 
 ## Testing
 
 **E2E test approach:**
-1. Use `test-workspace/` dummy git repo
-2. Set `project_path` to its absolute host path when creating jobs
-3. Worker receives it as bind mount at `/workspace`
+1. Author or load a workflow via the Flutter UI or API.
+2. Click **Deploy** in the top bar (or `POST .../deploy`).
+3. Right-click a source node and choose **Inject** (or `POST .../trigger`).
+4. Watch the node status badge update (`in:N out:M`).
+5. Tail THRT logs at `/var/log/launchy/thrt.log` inside the apps container.
 
-**Probe tests:** `tests/probes/`
-- Use fixtures in `tests/probes/fixtures/`
-- Test schema migrations
-- Verify workspace resolution
+**Unit tests:**
+```bash
+cd /home/gem/projects/THRT
+mix test --no-start
+```
 
-**Known gap:** No comprehensive E2E test suite yet. Manual testing via `curl` + worker logs.
+**Known gap:** No automated frontend widget/E2E tests yet. Manual testing via UI + `curl`.
 
 ## Known Issues
 
-1. **Migration failures:** Silent failures if column exists—check logs
-2. **SSE events empty:** `/api/v1/events` returns no data
-3. **Worker logs:** Not captured centrally—check `docker logs`
+1. **Running flows do not survive THRT restart** — deployments are in-memory. After restart, reload/redeploy YAML definitions.
+2. **Client deployment modes** — Two connection models with different CORS requirements:
+   - **Web (current)**: Flutter SPA served by Bun proxy → THRT same-origin. No CORS needed. Simplest deployment.
+   - **Native iOS (planned)**: App connects directly to THRT like a database client (e.g. MongoDB Compass → remote server). Requires CORS support on THRT. Not yet implemented.
+
+3. **App container restarts wipe installed Flutter SDK** — install Flutter to `/home/gem/projects/flutter` (bind-mounted) instead of `/home/gem/flutter`.
 
 ## File Layout
 
 ```
-crates/trailhead-service/
-├── src/
-│   ├── main.rs       - CLI entry point, daemon setup
-│   ├── db.rs         - SQLite schema, migrations
-│   ├── scheduler.rs  - Event-driven job scheduling, worker spawning
-│   ├── provider/     - Worker provider abstraction
-│   │   └── docker.rs - Docker provider
-│   ├── workflow/     - YAML parsing
-│   ├── jobs.rs       - State machine
-│   ├── ide.rs        - IDE adapters (SSH)
-│   ├── mcp.rs        - MCP server + tools
-│   ├── web.rs        - REST handlers
-│   └── api.rs        - Internal API routes
-├── workflows/        - Built-in workflow definitions
-└── Cargo.toml
+CoderyTrailhead/
+├── frontend/                     ← Flutter app
+│   ├── lib/
+│   │   ├── services/
+│   │   │   ├── workflows_api.dart
+│   │   │   └── thrt_api.dart
+│   │   ├── providers/
+│   │   │   └── thrt_provider.dart
+│   │   └── widgets/canvas/
+│   │       └── graph_canvas.dart
+│   └── serve.js                  ← Bun proxy to THRT
+└── openspec/                     ← design proposals
 
-tests/probes/         - Integration tests
+/home/gem/projects/THRT/          ← active Elixir runtime
+├── lib/thrt/
+│   ├── api.ex
+│   ├── engine.ex
+│   ├── store.ex
+│   ├── yaml.ex
+│   └── nodes/
+│       ├── task.ex
+│       └── genserver.ex
+└── flows/                        ← persisted YAML
 ```
-
-## Versioning
-
-Version is stored in `crates/trailhead-service/Cargo.toml`. Build and deploy are **manual-only** — use the `cut_release` tool in the `github-app` MCP server to cut a release.
-
-**Semver convention:**
-
-| Bump | When |
-|------|------|
-| `patch` | Bug fixes, docs, config changes, dependency updates |
-| `minor` | New features, new API endpoints, new MCP tools (backward compatible) |
-| `major` | Breaking changes, removed endpoints, incompatible schema/API changes |
-
-**Release flow:**
-1. Review `git log` since the last `trailhead-service-v*` tag to determine bump type
-2. Call `cut_release(account, repo, bump, message)` from the `github-app` MCP — this bumps `Cargo.toml`, commits + pushes, and triggers the build workflow automatically
-3. Monitor the build run; when complete, call `deploy-trailhead` (`workflow_dispatch`) to deploy
 
 ## For Agents Working on This Code
 
-1. **Always use project_path** for E2E tests — point to `test-workspace/` on the host
-2. **Migrations**: add to `MIGRATIONS` array, execute individually
-3. **New MCP tools**: add to `TrailheadMcpServer` impl with `#[tool]` macro
-4. **Worker providers**: implement `WorkerProvider` trait (see `docker.rs`); consult `openspec/changes/multi-provider-workers/design.md` for Daytona/MicroK8s/localhost integration
-5. **Schema changes**: update both CREATE TABLE in fixtures + MIGRATIONS
+1. **Frontend changes** go in `frontend/`; never edit `design/` prototype files.
+2. **Runtime changes** go in `/home/gem/projects/THRT/`.
+3. **New node types**: implement the `THRT.Node` behaviour and register in `THRT.Engine`.
+4. **YAML schema changes**: update `THRT.Yaml` + add tests.
+5. **Always test THRT with `mix test --no-start`**.
+6. **After frontend changes**, run `~/projects/flutter/bin/flutter build web --release` and restart the `trailhead` Launchy app.

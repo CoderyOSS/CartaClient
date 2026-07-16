@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/workflow_node.dart';
 import '../providers/api_provider.dart';
 import '../providers/canvas_controller.dart';
 import '../providers/mode_provider.dart';
@@ -11,7 +10,7 @@ import 'app_button.dart';
 import 'icons.dart';
 
 /// Full-canvas hero shown when no workflows exist in the backend.
-/// Single CTA: create the first workflow (seeded with an entrypoint node).
+/// Single CTA: create the first workflow (empty canvas, add nodes via toolbar).
 class EmptyWorkflowHero extends ConsumerStatefulWidget {
   EmptyWorkflowHero({super.key});
 
@@ -43,15 +42,7 @@ class _EmptyWorkflowHeroState extends ConsumerState<EmptyWorkflowHero> {
         name: name,
         version: 1,
         updated: 'just now',
-        nodes: const [
-          WorkflowNode(
-            id: 'entrypoint',
-            kind: 'worker',
-            label: 'entrypoint',
-            x: 0,
-            y: -16,
-          ),
-        ],
+        nodes: const [],
       );
       await api.create(name, workflowToYaml(placeholder));
       ref.invalidate(remoteWorkflowsProvider);
@@ -114,7 +105,7 @@ class _EmptyWorkflowHeroState extends ConsumerState<EmptyWorkflowHero> {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
             child: Text(
-              'Workflows are directed graphs of AI stages. Every workflow starts from an entrypoint — add workers, branches, and fans to compose your pipeline.',
+              'Workflows are directed graphs of nodes. Add genservers, tasks, functions, and log sinks to compose your pipeline.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13.5,
