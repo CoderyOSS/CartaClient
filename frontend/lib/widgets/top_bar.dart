@@ -987,7 +987,7 @@ class _BuildBar extends ConsumerWidget {
           workflows: workflows,
           activeWfId: wf.id,
           onPick: (id) {
-            // Save current document before switching.
+            // Save current document cache + flush to backend before switching.
             final currentWf = ref.read(workflowProvider);
             if (currentWf.id != emptyWorkflowId) {
               final currentVp = ref.read(canvasControllerProvider);
@@ -997,11 +997,15 @@ class _BuildBar extends ConsumerWidget {
                     WorkflowDocument(workflow: currentWf, viewport: currentVp);
                 return m;
               });
+              if (currentWf.parseError == null) {
+                final yaml = workflowToYaml(currentWf);
+                ref.read(workflowsApiProvider).replace(currentWf.name, yaml);
+              }
             }
             final picked =
                 ref.read(workflowsProvider).firstWhere((w) => w.id == id);
-            ref.read(workflowProvider.notifier).state = picked;
             final doc = ref.read(documentsProvider)[id];
+            ref.read(workflowProvider.notifier).state = doc?.workflow ?? picked;
             if (doc != null) {
               ref
                   .read(canvasControllerProvider.notifier)
