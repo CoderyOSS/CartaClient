@@ -185,10 +185,11 @@ class _OperatorPickerState extends ConsumerState<OperatorPicker> {
                           .whenData(installedModulesCategory)
                           .value;
                       final cats = <Widget>[];
-                      for (final cat in [
-                        ...nodeCategories,
-                        if (installed != null) installed,
-                      ]) {
+                       for (final cat in [
+                         nodeCategories.first, // ACTORS
+                         if (installed != null) installed,
+                         ...nodeCategories.skip(1),
+                       ]) {
                         final filtered = _filtered(cat.entries);
                         if (filtered.isEmpty) continue;
                         cats.add(
