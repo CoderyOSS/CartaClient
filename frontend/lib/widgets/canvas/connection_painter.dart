@@ -45,9 +45,12 @@ Path dashPath(Path source, {required double dash, required double gap}) {
 class ConnectionPainter extends CustomPainter {
   final List<WorkflowNode> nodes;
   final List<WorkflowConnection> connections;
-  final String? draggingNodeId;
-  final Offset dragOffset;
-  final Set<String> selectedIds;
+
+  /// Rendered (possibly mid-glide) node positions from the canvas's shared
+  /// snap animation. Arrows read these so they stay glued to node bodies —
+  /// including during drag (canvas folds dragOffset in) and the post-drag
+  /// snap glide.
+  final Map<String, Offset> renderedPositions;
   final ConnectionDragState? connectionDrag;
 
   /// IDs of connections that violate a validation rule (over-piped source or
@@ -70,9 +73,7 @@ class ConnectionPainter extends CustomPainter {
   ConnectionPainter({
     required this.nodes,
     required this.connections,
-    this.draggingNodeId,
-    this.dragOffset = Offset.zero,
-    this.selectedIds = const {},
+    this.renderedPositions = const {},
     this.connectionDrag,
     Set<String>? invalidIds,
     this.invalidDropPos,
@@ -84,14 +85,7 @@ class ConnectionPainter extends CustomPainter {
         super(repaint: ThemeController());
 
   Offset _nodePos(WorkflowNode node) {
-    final inGroupDrag = draggingNodeId != null &&
-        selectedIds.length > 1 &&
-        selectedIds.contains(draggingNodeId) &&
-        selectedIds.contains(node.id);
-    if (draggingNodeId == node.id || inGroupDrag) {
-      return Offset(node.x + dragOffset.dx, node.y + dragOffset.dy);
-    }
-    return Offset(node.x, node.y);
+    return renderedPositions[node.id] ?? Offset(node.x, node.y);
   }
 
   Offset _exitPoint(WorkflowNode node, WorkflowConnection conn) {
@@ -292,10 +286,9 @@ class ConnectionPainter extends CustomPainter {
   bool shouldRepaint(covariant ConnectionPainter old) {
     return old.nodes != nodes ||
         old.connections != connections ||
-        old.draggingNodeId != draggingNodeId ||
-        old.dragOffset != dragOffset ||
+        old.renderedPositions != renderedPositions ||
         old.connectionDrag != connectionDrag ||
         !_setsEqual(old.invalidIds, invalidIds) ||
-        !_setsEqual(old.selectedIds, selectedIds);
+        old.invalidDropPos != invalidDropPos;
   }
 }

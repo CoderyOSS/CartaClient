@@ -45,7 +45,8 @@ class GraphCanvas extends ConsumerStatefulWidget {
   ConsumerState<GraphCanvas> createState() => _GraphCanvasState();
 }
 
-class _GraphCanvasState extends ConsumerState<GraphCanvas> {
+class _GraphCanvasState extends ConsumerState<GraphCanvas>
+    with SingleTickerProviderStateMixin {
   static const double _snapGrid = 32.0;
   static const Duration _snapDuration = Duration(milliseconds: 200);
   static const double _doubleTapMaxDist = 20.0;
@@ -58,6 +59,105 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
   Timer? _statusTimer;
   bool _doubleClickDragActive = false;
   Offset? _doubleClickStartPos;
+
+  /// Single source of truth for *rendered* node positions. Nodes and the
+  /// connection painter both read this map, so arrows stay glued to nodes
+  /// throughout the post-drag snap glide. Logical positions live on
+  /// `workflow.nodes`; this map eases toward them via [_snapController].
+  final Map<String, Offset> _renderedPos = {};
+  Map<String, Offset> _snapFrom = {};
+  Map<String, Offset> _snapTo = {};
+  Object? _posWorkflowKey;
+  late final AnimationController _snapController = AnimationController(
+    vsync: this,
+    duration: _snapDuration,
+  )..addListener(_onSnapTick);
+
+  void _onSnapTick() {
+    final t = Curves.easeOutCubic.transform(_snapController.value);
+    setState(() {
+      _snapTo.forEach((id, to) {
+        final from = _snapFrom[id] ?? to;
+        _renderedPos[id] = Offset.lerp(from, to, t)!;
+      });
+    });
+  }
+
+  static bool _offsetMapEquals(Map<String, Offset> a, Map<String, Offset> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
+  }
+
+  /// Reconciles [_renderedPos] with logical node positions. Call every build.
+  ///
+  /// - New nodes seed instantly (no fly-in from 0,0).
+  /// - Dragged nodes track logical+dragOffset directly (no animation).
+  /// - Any other rendered≠logical gap starts (or retargets) one shared
+  ///   snap-glide animation, so nodes and arrows move in lockstep.
+  void _syncRenderedPositions(
+    WorkflowSummary workflow,
+    String? draggingNodeId,
+    Offset dragOffset,
+    Set<String> selectedIds,
+  ) {
+    if (_posWorkflowKey != workflow.id) {
+      _posWorkflowKey = workflow.id;
+      _renderedPos.clear();
+      _snapFrom = {};
+      _snapTo = {};
+      _snapController.stop();
+    }
+
+    final draggedIds = <String>{};
+    if (draggingNodeId != null) {
+      if (selectedIds.contains(draggingNodeId) && selectedIds.length > 1) {
+        draggedIds.addAll(selectedIds);
+      } else {
+        draggedIds.add(draggingNodeId);
+      }
+    }
+
+    final ids = workflow.nodes.map((n) => n.id).toSet();
+    _renderedPos.removeWhere((id, _) => !ids.contains(id));
+
+    final newFrom = <String, Offset>{};
+    final newTo = <String, Offset>{};
+    for (final n in workflow.nodes) {
+      final logical = Offset(n.x, n.y);
+      if (draggedIds.contains(n.id)) {
+        _renderedPos[n.id] = logical + dragOffset;
+        continue;
+      }
+      final rendered = _renderedPos.putIfAbsent(n.id, () => logical);
+      final target = _snapTo[n.id];
+      if (target != null && target == logical && rendered != logical) {
+        // Already gliding toward this logical position.
+        newFrom[n.id] = _snapFrom[n.id] ?? rendered;
+        newTo[n.id] = logical;
+        continue;
+      }
+      if (rendered != logical) {
+        newFrom[n.id] = rendered;
+        newTo[n.id] = logical;
+      }
+    }
+
+    if (newTo.isEmpty) {
+      if (_snapTo.isNotEmpty) {
+        _snapFrom = {};
+        _snapTo = {};
+        _snapController.stop();
+      }
+    } else if (!_offsetMapEquals(newTo, _snapTo) ||
+        !_snapController.isAnimating) {
+      _snapFrom = newFrom;
+      _snapTo = newTo;
+      _snapController.forward(from: 0.0);
+    }
+  }
 
   /// Node ids with an inject currently in flight (cap spinner state).
   final Set<String> _injecting = {};
@@ -92,6 +192,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     _tapTimer?.cancel();
     _statusTimer?.cancel();
     _activeStatusTimer?.cancel();
+    _snapController.dispose();
     super.dispose();
   }
 
@@ -278,6 +379,16 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     final flash = ref.watch(flashOverlayProvider);
     final spaceHeld = ref.watch(spaceHeldProvider);
 
+    // Reconcile rendered node positions with logical ones; starts the shared
+    // snap-glide animation when nodes were just repositioned. Nodes and
+    // arrows both read _renderedPos, so they move in lockstep.
+    _syncRenderedPositions(
+      workflow,
+      draggingNodeId,
+      dragOffset,
+      selection.current,
+    );
+
     // Sync in-place workflow edits to the document model (canvas viewport cache).
     // Backend persistence is handled by the autosave listener in main.dart.
     ref.listen<WorkflowSummary>(workflowProvider, (prev, next) {
@@ -370,6 +481,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     ) {
       const screenThreshold = 24.0;
       final worldThreshold = screenThreshold / viewport.zoom;
+      // Whole node body counts as a hit target (touch: finger covers the
+      // small connector). Slightly inflated so grazing the edge still snaps.
+      final bodyInflate = 8.0 / viewport.zoom;
       ({String nodeId, bool isOutput, int? port})? best;
       double bestDist = worldThreshold;
 
@@ -378,6 +492,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
 
         if (seekingInput) {
           if (!node.hasInput) continue;
+          if (node.rect.inflate(bodyInflate).contains(worldPos)) {
+            return (nodeId: node.id, isOutput: false, port: null);
+          }
           final pos = _handleWorldPos(node, false, null);
           final dist = (pos - worldPos).distance;
           if (dist < bestDist) {
@@ -387,9 +504,24 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         } else {
           // Seeking output — function ports only
           if (!node.hasOutput) continue;
-          if (node.kind == 'function' &&
+          final isBranch =
+              node.kind == 'function' &&
               node.expr == null &&
-              node.outputs.isNotEmpty) {
+              node.outputs.isNotEmpty;
+          if (node.rect.inflate(bodyInflate).contains(worldPos)) {
+            if (isBranch) {
+              final row =
+                  ((worldPos.dy -
+                              node.y -
+                              WorkflowNode.branchPadY) /
+                          WorkflowNode.branchRowHeight)
+                      .floor()
+                      .clamp(0, node.outputs.length - 1);
+              return (nodeId: node.id, isOutput: true, port: row);
+            }
+            return (nodeId: node.id, isOutput: true, port: null);
+          }
+          if (isBranch) {
             for (var p = 0; p < node.outputs.length; p++) {
               final pos = _handleWorldPos(node, true, p);
               final dist = (pos - worldPos).distance;
@@ -1044,39 +1176,16 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                               n.id == edge.to,
                                                         );
 
-                                                    // Compute dragged positions (same as painter)
+                                                    // Rendered positions (same as painter)
                                                     Offset nodePos(
                                                       WorkflowNode node,
                                                     ) {
-                                                      final inGroupDrag =
-                                                          draggingNodeId !=
-                                                              null &&
-                                                          selection
-                                                                  .current
-                                                                  .length >
-                                                              1 &&
-                                                          selection.current
-                                                              .contains(
-                                                                draggingNodeId,
-                                                              ) &&
-                                                          selection.current
-                                                              .contains(
-                                                                node.id,
-                                                              );
-                                                      if (draggingNodeId ==
-                                                              node.id ||
-                                                          inGroupDrag) {
-                                                        return Offset(
-                                                          node.x +
-                                                              dragOffset.dx,
-                                                          node.y +
-                                                              dragOffset.dy,
-                                                        );
-                                                      }
-                                                      return Offset(
-                                                        node.x,
-                                                        node.y,
-                                                      );
+                                                      return _renderedPos[node
+                                                              .id] ??
+                                                          Offset(
+                                                            node.x,
+                                                            node.y,
+                                                          );
                                                     }
 
                                                     Offset exitPoint(
@@ -1187,14 +1296,14 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                   }
                                                 }
                                                 : null,
-                                        child: CustomPaint(
-                                          painter: ConnectionPainter(
-                                            nodes: workflow.nodes,
-                                            connections: workflow.connections,
-                                            draggingNodeId: draggingNodeId,
-                                            dragOffset: dragOffset,
-                                            selectedIds: selection.current,
-                                            connectionDrag: connectionDrag,
+                                         child: CustomPaint(
+                                           painter: ConnectionPainter(
+                                             nodes: workflow.nodes,
+                                             connections: workflow.connections,
+                                             renderedPositions: Map.of(
+                                               _renderedPos,
+                                             ),
+                                             connectionDrag: connectionDrag,
                                             invalidDropPos:
                                                 ref
                                                     .watch(
@@ -1235,20 +1344,14 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                     child: UnboundedHitStack(
                       clipBehavior: Clip.none,
                       children: [
-                        ...workflow.nodes.map((node) {
-                          final current = selection.current;
-                          final isSelected = current.contains(node.id);
-                          final inGroupDrag =
-                              draggingNodeId != null &&
-                              current.contains(draggingNodeId) &&
-                              current.length > 1 &&
-                              current.contains(node.id);
-                          final isDragging =
-                              inGroupDrag || (draggingNodeId == node.id);
-                          final displayX =
-                              isDragging ? node.x + dragOffset.dx : node.x;
-                          final displayY =
-                              isDragging ? node.y + dragOffset.dy : node.y;
+                         ...workflow.nodes.map((node) {
+                           final current = selection.current;
+                           final isSelected = current.contains(node.id);
+                           final rendered =
+                               _renderedPos[node.id] ??
+                               Offset(node.x, node.y);
+                           final displayX = rendered.dx;
+                           final displayY = rendered.dy;
 
                           final nodeWidget =
                               node.kind == 'function' && node.expr == null
@@ -1301,14 +1404,11 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                     },
                                   );
 
-                          return AnimatedPositioned(
-                            key: ValueKey('${workflow.id}_${node.id}'),
-                            left: displayX,
-                            top: displayY,
-                            duration:
-                                isDragging ? Duration.zero : _snapDuration,
-                            curve: Curves.easeOutCubic,
-                            child: MultiHitStack(
+                           return Positioned(
+                             key: ValueKey('${workflow.id}_${node.id}'),
+                             left: displayX,
+                             top: displayY,
+                             child: MultiHitStack(
                               clipBehavior: Clip.none,
                               children: [
                                 GestureDetector(
