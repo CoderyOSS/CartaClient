@@ -1947,6 +1947,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas>
                     );
                   },
                 ),
+                CanvasToolbar(canvasSize: canvasSize),
                 // Screen-space operator picker
                 if (pickerAnchor != null)
                   OperatorPicker(
@@ -2008,7 +2009,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas>
                       );
                     },
                   ),
-                CanvasToolbar(canvasSize: canvasSize),
                 // Mode indicator badge
                 Positioned(
                   right: 16,
