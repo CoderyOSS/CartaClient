@@ -176,6 +176,33 @@ Deferred. See roadmap.
 
 ## Recently Landed
 
+- **Crash visibility + ghost stats + task validation (2026-07-20)**: Root cause
+  of "logging broken / no in's or out's on trigger": a user expr that raises
+  (e.g. `Kernel.put_in(payload, [:payload, :meta], 1)` on `%{}`) crashed the
+  node's route_fn → GenServer stopped → supervisor restarted it →
+  `Stats.init_node` re-**inserted** `{0,0}`, wiping counters every crash —
+  status polls showed 0/0 forever and the crash was only in THRT stdout.
+  Fixes, THRT: `Stats.init_node` uses `:ets.insert_new` (counters survive
+  node restarts; crash asymmetry in:1 out:0 now visible). `Engine.undeploy`
+  now calls `Stats.clear_flow/1` (previously only LogFlags) — `/status` no
+  longer shows ghost nodes from dead deployments. `Node.Server` emits
+  `:error` log frames over `LogBus` on route crashes AND node-callback
+  crashes (`%{error, kind: :route_crash | :node_crash, payload}`); LogBus
+  `emit/4` accepts `:error`. `Engine.validate_node_configs` gains a Task
+  clause (missing/bad/non-string `expr` fails fast — an expr-less task node
+  previously crashed the supervisor with a raw
+  `{:shutdown, {:failed_to_start_child, ...}}` tuple; the frontend has no
+  task expr editor, so GUI-built task nodes always crashed). `api.ex`
+  `humanize_reason` unwraps `:shutdown`/`:failed_to_start_child`/
+  `:config_error` tuples → readable strings (`:missing_expr` message now
+  "task/function node requires config.expr"). Frontend: log stream view
+  passes `dir == 'error'` frames unconditionally (no toggle required) and
+  styles them `AppColors.danger`. Verified E2E: `mix test` 279 green; inject
+  on crashing flow → counters in:2 out:0 persist; error frame received over
+  `wss://trailhead.../logs/stream` through Caddy+Nginx+Bun bridge.
+  Infra note: `/var/log/launchy/` in the apps container is EMPTY — Launchy
+  pipes app stdout to the container's own stdout (see container logs), the
+  documented `thrt.log` path does not exist.
 - **Config validation + log ordering + editor fixes (2026-07-20)**: Root cause
   of the "job reload badmap" report was the frontend emitting **duplicate
   `config:` blocks** on transform nodes (expr + logging flags each wrote
@@ -349,7 +376,8 @@ cp /path/to/yaml/dir/*.yml /home/gem/projects/THRT/flows/
    drawer's inject section → press **trigger** (or `POST .../inject`).
 4. Watch the node status badge update (`in:N out:M`) and the **log** drawer
    stream frames over the per-flow WebSocket.
-5. Tail THRT logs at `/var/log/launchy/thrt.log` inside the apps container.
+5. THRT logs go to the apps container's stdout (Launchy pipes; `/var/log/launchy/`
+   is empty) — read via container logs (`codery_get_container_info service=apps`).
 
 **Unit tests:**
 ```bash

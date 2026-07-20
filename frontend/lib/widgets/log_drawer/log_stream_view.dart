@@ -39,7 +39,10 @@ class _LogStreamViewState extends ConsumerState<LogStreamView> {
 
     final all = buffers[wf.name]?.snapshot() ?? const <LogFrame>[];
     final frames = all
-        .where((f) => enabled.contains('${f.nodeId}.${f.dir}'))
+        // Crash frames (dir == 'error') always pass — they have no toggle
+        // and must surface even when the node's in/out points are disabled.
+        .where((f) =>
+            f.dir == 'error' || enabled.contains('${f.nodeId}.${f.dir}'))
         .toList()
       ..sort((a, b) {
         final byTs = a.ts.compareTo(b.ts);
@@ -92,7 +95,12 @@ class _FrameLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isIn = frame.dir == 'in';
-    final dirColor = isIn ? AppColors.info : AppColors.success;
+    final isError = frame.dir == 'error';
+    final dirColor = isError
+        ? AppColors.danger
+        : isIn
+            ? AppColors.info
+            : AppColors.success;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -119,7 +127,7 @@ class _FrameLine extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
-                  isIn ? 'in' : 'out',
+                  frame.dir,
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 9.5,
