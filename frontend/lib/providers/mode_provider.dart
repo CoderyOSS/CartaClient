@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/workflow_document.dart';
+import '../models/workflow_node.dart';
 import '../utils/yaml_to_workflow.dart';
 import '../widgets/mode_rail.dart';
 import '../services/jobs_api.dart';
@@ -116,3 +117,91 @@ final documentsProvider =
 
 /// True when the active workflow has unsaved canvas edits.
 final workflowDirtyProvider = StateProvider<bool>((ref) => false);
+
+/// Per-job independent workflow snapshots, keyed by job id.
+///
+/// A job launches from a copy of the workflow YAML (`JobDto.content`, stored
+/// by THRT at create time). In Active mode the canvas and drawer bind to
+/// this copy — edits here never touch [workflowProvider], so the stored
+/// workflow and the autosave path stay untouched.
+final jobDocumentsProvider =
+    StateProvider<Map<String, WorkflowSummary>>((ref) => {});
+
+/// The document the canvas renders: the selected job's snapshot in Active
+/// mode, otherwise the live workflow.
+final canvasWorkflowProvider = Provider<WorkflowSummary>((ref) {
+  if (ref.watch(modeProvider) == AppMode.active) {
+    final job = ref.watch(selectedJobProvider);
+    if (job != null) {
+      final doc = ref.watch(jobDocumentsProvider)[job.id];
+      if (doc != null) return doc;
+    }
+  }
+  return ref.watch(workflowProvider);
+});
+
+/// Routes a canvas-model mutation to the selected job's snapshot in Active
+/// mode, or to the live workflow otherwise. Job-snapshot edits bypass the
+/// autosave listener (which only watches [workflowProvider]).
+void updateCanvasWorkflow(
+  WidgetRef ref,
+  WorkflowSummary Function(WorkflowSummary) update,
+) {
+  final mode = ref.read(modeProvider);
+  final job = ref.read(selectedJobProvider);
+  if (mode == AppMode.active && job != null) {
+    ref.read(jobDocumentsProvider.notifier).update((docs) {
+      final m = Map<String, WorkflowSummary>.from(docs);
+      final cur = m[job.id];
+      if (cur != null) m[job.id] = update(cur);
+      return m;
+    });
+  } else {
+    ref.read(workflowProvider.notifier).update(update);
+  }
+}
+
+/// Convenience wrapper over [updateCanvasWorkflow] for the common case of
+/// transforming a single node by id.
+void updateCanvasNode(
+  WidgetRef ref,
+  String nodeId,
+  WorkflowNode Function(WorkflowNode) update,
+) {
+  updateCanvasWorkflow(
+    ref,
+    (wf) => wf.copyWith(
+      nodes: wf.nodes.map((n) => n.id == nodeId ? update(n) : n).toList(),
+    ),
+  );
+}
+
+/// Ensures a snapshot exists for [job] in [jobDocumentsProvider]. Parses
+/// the YAML the job was launched with (`job.content`); falls back to the
+/// currently loaded workflow of the same name when content is unavailable
+/// (e.g. jobs created before content snapshots existed).
+void ensureJobDocument(WidgetRef ref, JobDto job) {
+  final docs = ref.read(jobDocumentsProvider);
+  if (docs.containsKey(job.id)) return;
+
+  WorkflowSummary? doc;
+  final content = job.content;
+  if (content != null) {
+    try {
+      doc = yamlToWorkflow(job.flowName, content);
+    } catch (_) {
+      doc = null;
+    }
+  }
+  doc ??= ref
+      .read(workflowsProvider)
+      .cast<WorkflowSummary?>()
+      .firstWhere((w) => w!.name == job.flowName, orElse: () => null);
+  if (doc == null) return;
+
+  ref.read(jobDocumentsProvider.notifier).update((docs) {
+    final m = Map<String, WorkflowSummary>.from(docs);
+    m[job.id] = doc!;
+    return m;
+  });
+}

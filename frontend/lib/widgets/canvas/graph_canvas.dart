@@ -59,6 +59,14 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
   bool _doubleClickDragActive = false;
   Offset? _doubleClickStartPos;
 
+  /// Node ids with an inject currently in flight (cap spinner state).
+  final Set<String> _injecting = {};
+
+  /// 1s poll of the current workflow's runtime status while in Active mode.
+  /// The jobs-based poll above only fires for running jobs; this one keeps
+  /// `flowStatusProvider` fresh for the visible flow regardless.
+  Timer? _activeStatusTimer;
+
   double _snap(double value) => (value / _snapGrid).round() * _snapGrid;
   double _snapCenter(double center) => (center / _snapGrid).round() * _snapGrid;
 
@@ -76,6 +84,15 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     // Seed classification with whatever the provider already has (the
     // ref.listen in build only fires on subsequent changes).
     ref.read(installedNodesProvider).whenData(_syncInstalledActorKinds);
+    _syncActiveStatusTimer(ref.read(modeProvider));
+  }
+
+  @override
+  void dispose() {
+    _tapTimer?.cancel();
+    _statusTimer?.cancel();
+    _activeStatusTimer?.cancel();
+    super.dispose();
   }
 
   static double _pointToSegmentDistance(Offset p, Offset a, Offset b) {
@@ -111,7 +128,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
 
   void _updateMarquee(Offset startPos, Offset currentPos) {
     final viewport = ref.read(canvasControllerProvider);
-    final workflow = ref.read(workflowProvider);
+    final workflow = ref.read(canvasWorkflowProvider);
     final screenRect = Rect.fromPoints(startPos, currentPos);
     final world = Rect.fromPoints(
       (screenRect.topLeft - viewport.pan) / viewport.zoom,
@@ -165,6 +182,55 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     }
   }
 
+  /// Poll runtime status of the currently selected workflow and merge it
+  /// into `flowStatusProvider` (drives badges, drawer trigger, cap button).
+  Future<void> _pollActiveFlow() async {
+    final wf = ref.read(canvasWorkflowProvider);
+    if (wf.name.isEmpty) return;
+    try {
+      final status = await ref.read(thrtApiProvider).status(wf.name);
+      ref.read(flowStatusProvider.notifier).state =
+          Map<String, FlowStatus>.from(ref.read(flowStatusProvider))
+            ..[wf.name] = status;
+    } catch (e) {
+      debugPrint('active flow status poll failed: $e');
+    }
+  }
+
+  void _syncActiveStatusTimer(AppMode mode) {
+    _activeStatusTimer?.cancel();
+    _activeStatusTimer = null;
+    if (mode == AppMode.active) {
+      _pollActiveFlow();
+      _activeStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        _pollActiveFlow();
+      });
+    }
+  }
+
+  /// Trigger button on a `source.inject` node cap (active mode, deployed
+  /// flow). Uses the shared inject buffer so drawer edits apply.
+  Future<void> _triggerNodeInject(WorkflowNode node) async {
+    if (_injecting.contains(node.id)) return;
+    final wf = ref.read(canvasWorkflowProvider);
+    final code =
+        ref.read(injectBufferProvider)[injectBufferKey(ref, node.id)] ??
+        node.payloadCode ??
+        '';
+    setState(() => _injecting.add(node.id));
+    try {
+      await triggerNodeInject(ref, wf.name, node.id, code);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('inject failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _injecting.remove(node.id));
+    }
+  }
+
   void _toggleScissors() {
     final current = ref.read(scissorsModeProvider);
     final next = !current;
@@ -180,13 +246,6 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
   }
 
   @override
-  void dispose() {
-    _tapTimer?.cancel();
-    _statusTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     // Keep actor classification in sync with runtime-installed modules so
     // edges into harness/tool/etc. get message semantics.
@@ -195,7 +254,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     });
     final viewport = ref.watch(canvasControllerProvider);
     final controller = ref.read(canvasControllerProvider.notifier);
-    final workflow = ref.watch(workflowProvider);
+    // Render the selected job's snapshot in Active mode, the live workflow
+    // otherwise. Mutations route through updateCanvasWorkflow.
+    final workflow = ref.watch(canvasWorkflowProvider);
     final selection = ref.watch(selectionProvider);
     final hoveredNodeId = ref.watch(hoveredNodeProvider);
     final draggingNodeId = ref.watch(draggingNodeIdProvider);
@@ -203,6 +264,13 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
     final pickerAnchor = ref.watch(operatorPickerProvider);
     final mode = ref.watch(modeProvider);
     final editable = mode == AppMode.build;
+    // Active mode allows repositioning nodes on the job snapshot (never
+    // persisted to the workflow). Requires a job document to exist.
+    final selectedJob = ref.watch(selectedJobProvider);
+    final hasJobDoc = selectedJob != null &&
+        ref.watch(jobDocumentsProvider).containsKey(selectedJob.id);
+    final repositionable =
+        editable || (mode == AppMode.active && hasJobDoc);
     final menuAnchor = ref.watch(nodeMenuProvider);
     final connectionDrag = ref.watch(connectionDragProvider);
     final scissors = ref.watch(scissorsModeProvider);
@@ -242,6 +310,8 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         });
       }
     });
+
+    ref.listen(modeProvider, (_, next) => _syncActiveStatusTimer(next));
 
     final flowStatuses = ref.watch(flowStatusProvider);
 
@@ -376,7 +446,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
       if (drag == null) return;
 
       if (drag.targetNodeId != null) {
-        final current = ref.read(workflowProvider);
+        final current = ref.read(canvasWorkflowProvider);
         final nodeMap = {for (final n in current.nodes) n.id: n};
         final alreadyExists = current.connections.any(
           (e) =>
@@ -399,8 +469,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
             current.connections,
             nodeMap,
           )) {
-            ref.read(workflowProvider.notifier).state = current.copyWith(
-              connections: [...current.connections, newEdge],
+            updateCanvasWorkflow(
+              ref,
+              (w) => w.copyWith(connections: [...w.connections, newEdge]),
             );
           } else {
             final dropPos = drag.currentWorldPos;
@@ -459,8 +530,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                   : const [],
           expr: entry.isTransform ? entry.templateExpr : null,
         );
-        ref.read(workflowProvider.notifier).state = workflow.copyWith(
-          nodes: [...workflow.nodes, newNode],
+        updateCanvasWorkflow(
+          ref,
+          (w) => w.copyWith(nodes: [...w.nodes, newNode]),
         );
         ref.read(selectionProvider.notifier).selectOne(id);
         ref.read(operatorPickerProvider.notifier).state = null;
@@ -499,25 +571,28 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         sourcePort: pickerAnchor?.sourcePort,
       );
 
-      ref.read(workflowProvider.notifier).state = workflow.copyWith(
-        nodes: [...workflow.nodes, newNode],
-        connections: [...workflow.connections, edge],
+      updateCanvasWorkflow(
+        ref,
+        (w) => w.copyWith(
+          nodes: [...w.nodes, newNode],
+          connections: [...w.connections, edge],
+        ),
       );
       ref.read(selectionProvider.notifier).selectOne(id);
       ref.read(operatorPickerProvider.notifier).state = null;
     }
 
     void deleteNode(String nodeId) {
-      final currentWorkflow = ref.read(workflowProvider);
+      final currentWorkflow = ref.read(canvasWorkflowProvider);
       final newNodes =
           currentWorkflow.nodes.where((n) => n.id != nodeId).toList();
       final newEdges =
           currentWorkflow.connections
               .where((e) => e.from != nodeId && e.to != nodeId)
               .toList();
-      ref.read(workflowProvider.notifier).state = currentWorkflow.copyWith(
-        nodes: newNodes,
-        connections: newEdges,
+      updateCanvasWorkflow(
+        ref,
+        (w) => w.copyWith(nodes: newNodes, connections: newEdges),
       );
       ref.read(selectionProvider.notifier).removeIds([nodeId]);
       if (hoveredNodeId == nodeId) {
@@ -538,8 +613,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
         y: _snap(node.y + 32),
         outputs: node.outputs,
       );
-      ref.read(workflowProvider.notifier).state = workflow.copyWith(
-        nodes: [...workflow.nodes, newNode],
+      updateCanvasWorkflow(
+        ref,
+        (w) => w.copyWith(nodes: [...w.nodes, newNode]),
       );
       ref.read(selectionProvider.notifier).selectOne(id);
       ref.read(nodeMenuProvider.notifier).state = null;
@@ -573,9 +649,9 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
 
       final newNodes = workflow.nodes.where((n) => n.id != nodeId).toList();
 
-      ref.read(workflowProvider.notifier).state = workflow.copyWith(
-        nodes: newNodes,
-        connections: newEdges,
+      updateCanvasWorkflow(
+        ref,
+        (w) => w.copyWith(nodes: newNodes, connections: newEdges),
       );
 
       ref.read(selectionProvider.notifier).removeIds([nodeId]);
@@ -895,19 +971,19 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                   }
 
                                   if (toDelete.isNotEmpty) {
-                                    final current = ref.read(workflowProvider);
-                                    ref
-                                        .read(workflowProvider.notifier)
-                                        .state = current.copyWith(
-                                      connections:
-                                          current.connections
-                                              .where(
-                                                (e) =>
-                                                    !toDelete.contains(
-                                                      '${e.from}\u2192${e.to}',
-                                                    ),
-                                              )
-                                              .toList(),
+                                    updateCanvasWorkflow(
+                                      ref,
+                                      (w) => w.copyWith(
+                                        connections:
+                                            w.connections
+                                                .where(
+                                                  (e) =>
+                                                      !toDelete.contains(
+                                                        '${e.from}\u2192${e.to}',
+                                                      ),
+                                                )
+                                                .toList(),
+                                      ),
                                     );
                                   }
                                 }
@@ -1095,23 +1171,18 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                   }
 
                                                   if (nearestEdgeKey != null) {
-                                                    final current = ref.read(
-                                                      workflowProvider,
-                                                    );
-                                                    ref
-                                                        .read(
-                                                          workflowProvider
-                                                              .notifier,
-                                                        )
-                                                        .state = current.copyWith(
-                                                      connections:
-                                                          current.connections
-                                                              .where(
-                                                                (e) =>
-                                                                    '${e.from}\u2192${e.to}' !=
-                                                                    nearestEdgeKey,
-                                                              )
-                                                              .toList(),
+                                                    updateCanvasWorkflow(
+                                                      ref,
+                                                      (w) => w.copyWith(
+                                                        connections:
+                                                            w.connections
+                                                                .where(
+                                                                  (e) =>
+                                                                      '${e.from}\u2192${e.to}' !=
+                                                                      nearestEdgeKey,
+                                                                )
+                                                                .toList(),
+                                                      ),
                                                     );
                                                   }
                                                 }
@@ -1201,9 +1272,21 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                     node: node,
                                     selected: isSelected,
                                     icon:
-                                        node.expr != null
-                                            ? TrailheadIconData.terminal
-                                            : TrailheadIconData.bot,
+                                        node.kind == 'source.inject'
+                                            ? TrailheadIconData.play
+                                            : node.kind == 'delay'
+                                                ? TrailheadIconData.stopwatch
+                                                : node.expr != null
+                                                    ? TrailheadIconData.terminal
+                                                    : TrailheadIconData.bot,
+                                    triggerable:
+                                        node.kind == 'source.inject' &&
+                                            !editable &&
+                                            (flowStatuses[workflow.name]
+                                                    ?.deployed ??
+                                                false),
+                                    triggering:
+                                        _injecting.contains(node.id),
                                     onEnter: () {
                                       ref
                                           .read(hoveredNodeProvider.notifier)
@@ -1230,9 +1313,23 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                               children: [
                                 GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () {
+                                  onTapUp: (details) {
                                     if (scissors && editable) {
                                       deleteNode(node.id);
+                                      return;
+                                    }
+                                    // Trigger cap: left 30px of an inject
+                                    // node on a deployed flow (active mode).
+                                    // Routed here because a nested detector
+                                    // on the cap loses the gesture arena to
+                                    // this parent node detector.
+                                    if (node.kind == 'source.inject' &&
+                                        !editable &&
+                                        (flowStatuses[workflow.name]
+                                                ?.deployed ??
+                                            false) &&
+                                        details.localPosition.dx <= 30) {
+                                      _triggerNodeInject(node);
                                       return;
                                     }
                                     ref
@@ -1266,7 +1363,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           }
                                           : null,
                                   onPanStart:
-                                      editable && !scissors
+                                      repositionable && !scissors
                                           ? (_) {
                                             ref
                                                 .read(
@@ -1282,7 +1379,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           }
                                           : null,
                                   onPanUpdate:
-                                      editable && !scissors
+                                      repositionable && !scissors
                                           ? (details) {
                                             if (draggingNodeId == node.id) {
                                               ref
@@ -1294,7 +1391,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           }
                                           : null,
                                   onPanEnd:
-                                      editable && !scissors
+                                      repositionable && !scissors
                                           ? (_) {
                                             if (draggingNodeId != node.id)
                                               return;
@@ -1306,7 +1403,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                     .read(selectionProvider)
                                                     .current;
                                             final currentWorkflow = ref.read(
-                                              workflowProvider,
+                                              canvasWorkflowProvider,
                                             );
                                             final isGroupDrag =
                                                 cur.length > 1 &&
@@ -1334,10 +1431,11 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                                   );
                                                 }).toList();
 
-                                            ref
-                                                .read(workflowProvider.notifier)
-                                                .state = currentWorkflow
-                                                .copyWith(nodes: newNodes);
+                                            updateCanvasWorkflow(
+                                              ref,
+                                              (w) =>
+                                                  w.copyWith(nodes: newNodes),
+                                            );
                                             ref
                                                 .read(
                                                   draggingNodeIdProvider
@@ -1352,7 +1450,7 @@ class _GraphCanvasState extends ConsumerState<GraphCanvas> {
                                           }
                                           : null,
                                   onPanCancel:
-                                      editable && !scissors
+                                      repositionable && !scissors
                                           ? () {
                                             ref
                                                 .read(

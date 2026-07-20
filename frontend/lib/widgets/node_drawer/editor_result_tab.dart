@@ -33,14 +33,10 @@ class _EditorResultTabState extends ConsumerState<EditorResultTab> {
 
   void _updateFormat(String format) {
     setState(() => _format = format);
-    final wf = ref.read(workflowProvider);
-    ref.read(workflowProvider.notifier).state = wf.copyWith(
-      nodes: wf.nodes.map((n) {
-        if (n.id == widget.node.id) {
-          return n.copyWith(resultFormat: format);
-        }
-        return n;
-      }).toList(),
+    updateCanvasNode(
+      ref,
+      widget.node.id,
+      (n) => n.copyWith(resultFormat: format),
     );
   }
 

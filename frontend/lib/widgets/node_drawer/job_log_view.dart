@@ -5,7 +5,6 @@ import '../../models/workflow_node.dart';
 import '../../providers/mode_provider.dart';
 import '../../providers/mock_data.dart';
 import '../../providers/thrt_provider.dart';
-import '../../services/thrt_api.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
 import 'node_drawer.dart';
@@ -779,10 +778,7 @@ class _ActiveInjectSectionState extends ConsumerState<_ActiveInjectSection> {
   bool _lastOk = true;
   bool _sending = false;
 
-  String get _bufferKey {
-    final wf = ref.read(workflowProvider);
-    return '${wf.name}:${widget.node.id}';
-  }
+  String get _bufferKey => injectBufferKey(ref, widget.node.id);
 
   String _bufferText() {
     final buffers = ref.read(injectBufferProvider);
@@ -796,7 +792,7 @@ class _ActiveInjectSectionState extends ConsumerState<_ActiveInjectSection> {
   }
 
   Future<void> _trigger() async {
-    final wf = ref.read(workflowProvider);
+    final wf = ref.read(canvasWorkflowProvider);
     final code = _bufferText();
 
     setState(() {
@@ -805,11 +801,7 @@ class _ActiveInjectSectionState extends ConsumerState<_ActiveInjectSection> {
     });
 
     try {
-      await ref.read(thrtApiProvider).injectCode(wf.name, widget.node.id, code);
-      final status = await ref.read(thrtApiProvider).status(wf.name);
-      ref.read(flowStatusProvider.notifier).state =
-          Map<String, FlowStatus>.from(ref.read(flowStatusProvider))
-            ..[wf.name] = status;
+      await triggerNodeInject(ref, wf.name, widget.node.id, code);
 
       if (!mounted) return;
       final now = DateTime.now();
@@ -833,7 +825,7 @@ class _ActiveInjectSectionState extends ConsumerState<_ActiveInjectSection> {
 
   @override
   Widget build(BuildContext context) {
-    final wf = ref.watch(workflowProvider);
+    final wf = ref.watch(canvasWorkflowProvider);
     final statuses = ref.watch(flowStatusProvider);
     final deployed = statuses[wf.name]?.deployed ?? false;
 

@@ -6,11 +6,11 @@ import '../../theme/tokens.dart';
 import 'node_drawer.dart';
 import 'payload_editor.dart';
 
-/// Builder-mode "payload" tab for `source.inject` nodes.
+/// "Payload" tab for `source.inject` nodes (builder and job views).
 ///
 /// Binds the editor to `node.payloadCode` and writes back through
-/// `workflowProvider.copyWith` — the autosave listener in main.dart handles
-/// persistence.
+/// [updateCanvasNode] — builder mode hits `workflowProvider` (autosave
+/// persists), job view hits the job's snapshot only.
 class EditorPayloadTab extends ConsumerWidget {
   final WorkflowNode node;
 
@@ -29,12 +29,10 @@ class EditorPayloadTab extends ConsumerWidget {
             child: PayloadEditor(
               initialCode: node.payloadCode ?? '',
               onChanged: (code) {
-                final wf = ref.read(workflowProvider);
-                ref.read(workflowProvider.notifier).state = wf.copyWith(
-                  nodes: wf.nodes
-                      .map((n) =>
-                          n.id == node.id ? n.copyWith(payloadCode: code) : n)
-                      .toList(),
+                updateCanvasNode(
+                  ref,
+                  node.id,
+                  (n) => n.copyWith(payloadCode: code),
                 );
               },
             ),
@@ -57,13 +55,10 @@ class EditorPayloadTab extends ConsumerWidget {
                     description: 'emit once 20ms after deploy',
                     value: node.once ?? false,
                     onChanged: (v) {
-                      final wf = ref.read(workflowProvider);
-                      ref.read(workflowProvider.notifier).state = wf.copyWith(
-                        nodes: wf.nodes
-                            .map((n) => n.id == node.id
-                                ? n.copyWith(once: v)
-                                : n)
-                            .toList(),
+                      updateCanvasNode(
+                        ref,
+                        node.id,
+                        (n) => n.copyWith(once: v),
                       );
                     },
                   ),

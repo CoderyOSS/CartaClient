@@ -10,7 +10,7 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 - Dark slate background (`#0c0d10` page, `#14161b` main content)
 - **Riverpod** for state management (`flutter_riverpod`)
 - **Mode rail** + **top bar** implemented, driven by `modeProvider`
-- Workflows loaded from backend at startup (Build mode); jobs panel still mock
+- Workflows loaded from backend at startup (Build mode); jobs list loaded from `/api/v1/jobs` (Active/History modes)
 
 ### Implemented
 
@@ -29,7 +29,7 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 | App shell | `lib/main.dart` | ProviderScope + ConsumerWidget shell: rail + top bar + content |
 | Static server | `serve.js` | Bun server for dev preview at trailhead-dev subdomain |
 | **Graph canvas** | `lib/widgets/canvas/graph_canvas.dart` | Pan, zoom (gesture), snap-to-grid, dot grid, bezier connections |
-| **Worker node** | `lib/widgets/canvas/worker_node.dart` | 168x36 capsule, direction F, selection glow, rail |
+| **Worker node** | `lib/widgets/canvas/worker_node.dart` | 168x36 capsule, direction F, selection glow, rail; inject trigger cap (glow + spinner) when deployed in Active mode |
 | **Branch node** | `lib/widgets/canvas/routing_node.dart` | Per-port output routing, case rows |
 | **Map node** | `lib/widgets/canvas/fan_node.dart` | 168x36 single-line map capsule |
 | **Dot grid** | `lib/widgets/canvas/dot_grid_painter.dart` | 32px grid, scales with zoom |
@@ -44,7 +44,7 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 ### Not Yet Implemented
 
 - Snapshot filmstrip (bottom strip)
-- Jobs panel backend integration (still uses `mockJobs` from `mock_data.dart`)
+- Per-node executions feed in the drawer's job tab (still `mockStageExecutions`)
 - Routing (multiple pages)
 - **Zoom control UI overlay** — zoom exists in controller but no `−`/`+`/reset bar yet
 
@@ -83,6 +83,24 @@ proxy to `/api/v1/workflows/:name/deploy|status|inject|log-flags|logs/stream`.
 ### Autosave
 Canvas edits trigger debounced (800ms) `PUT /workflows/{name}` via the autosave
 listener in `lib/main.dart`. The `workflowDirtyProvider` tracks unsaved state.
+
+### Job snapshots (Active mode)
+
+A job runs an **independent copy** of the workflow, not the live workflow:
+
+- THRT stores the launched YAML on the job row and returns it as `content`
+  on `/api/v1/jobs/*`.
+- On launch or job select, the YAML is parsed into `jobDocumentsProvider`
+  (keyed by job id) — see `lib/providers/mode_provider.dart`.
+- Canvas and drawer bind to `canvasWorkflowProvider` (job snapshot in Active
+  mode, `workflowProvider` otherwise). All mutations go through
+  `updateCanvasWorkflow` / `updateCanvasNode`, which target the job snapshot
+  in Active mode — they bypass autosave, so job edits never persist to the
+  stored workflow.
+- Node repositioning is allowed in Active mode (job-local only).
+- The JobBar **reload** button kills the job, re-syncs to the current stored
+  workflow, and relaunches (fresh snapshot, job-local edits discarded).
+- Inject buffers are job-scoped via `injectBufferKey` (thrt_provider.dart).
 
 ## Build Commands
 

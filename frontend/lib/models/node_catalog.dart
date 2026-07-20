@@ -41,10 +41,10 @@ String _e2(String call) => '$call(payload, _)';
 String _e3(String call) => '$call(payload, _, _)';
 
 const _zap = TrailheadIconData.zap;
-const _clock = TrailheadIconData.clock;
+const _stopwatch = TrailheadIconData.stopwatch;
 const _globe = TrailheadIconData.globe;
 const _branch = TrailheadIconData.gitBranch;
-const _send = TrailheadIconData.send;
+const _play = TrailheadIconData.play;
 const _terminal = TrailheadIconData.terminal;
 
 /// Dynamic picker category for modules installed in the connected runtime
@@ -73,13 +73,13 @@ final List<NodeCategory> nodeCategories = [
   NodeCategory(label: 'ACTORS', entries: [
     const NodeEntry(kind: 'genserver', label: 'genserver', desc: 'stateful \u00b7 module or inline', icon: _zap),
     const NodeEntry(kind: 'task', label: 'task', desc: 'stateless \u00b7 concurrent \u00b7 elixir expr', icon: _zap),
-    const NodeEntry(kind: 'source.inject', label: 'source.inject', desc: 'timer or one-shot inject', icon: _send),
+    const NodeEntry(kind: 'source.inject', label: 'source.inject', desc: 'timer or one-shot inject', icon: _play),
     const NodeEntry(kind: 'http.server.ingress', label: 'http server ingress', desc: 'HTTP server endpoint', icon: _globe),
     const NodeEntry(kind: 'http.client.request', label: 'http client request', desc: 'Outbound HTTP call', icon: _globe),
   ]),
   NodeCategory(label: 'FUNCTIONS', entries: [
     const NodeEntry(kind: 'function', label: 'function', desc: 'conditional routing', icon: _branch),
-    const NodeEntry(kind: 'delay', label: 'delay', desc: 'timed delay  configurable ms', icon: _clock),
+    const NodeEntry(kind: 'delay', label: 'delay', desc: 'timed delay  configurable ms', icon: _stopwatch),
     const NodeEntry(kind: 'http.server.egress', label: 'http server egress', desc: 'HTTP response', icon: _globe),
   ]),
   NodeCategory(label: 'Elixir.String', entries: [

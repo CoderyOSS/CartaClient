@@ -38,15 +38,7 @@ class _EditorPromptTabState extends ConsumerState<EditorPromptTab> {
   }
 
   void _update(String value) {
-    final wf = ref.read(workflowProvider);
-    ref.read(workflowProvider.notifier).state = wf.copyWith(
-      nodes: wf.nodes.map((n) {
-        if (n.id == widget.node.id) {
-          return n.copyWith(prompt: value);
-        }
-        return n;
-      }).toList(),
-    );
+    updateCanvasNode(ref, widget.node.id, (n) => n.copyWith(prompt: value));
   }
 
   @override

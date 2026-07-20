@@ -152,6 +152,11 @@ POST   /api/v1/workflows/{name}/inject   - inject Elixir literal {node_id, code}
 PATCH  /api/v1/workflows/{name}/log-flags - hot-toggle {node_id, log_in?, log_out?}
 GET    /api/v1/workflows/{name}/logs/stream - WebSocket log stream (per-flow)
 POST   /api/v1/validate/elixir-term      - validate literal {code} → {ok, error?, line?}
+POST   /api/v1/jobs                      - launch flow as job {flow_name, description?} → job incl. YAML snapshot {content}
+GET    /api/v1/jobs                      - list jobs (each with content snapshot)
+GET    /api/v1/jobs/{id}                 - get job
+POST   /api/v1/jobs/{id}/cancel          - undeploy flow, mark job cancelled
+DELETE /api/v1/jobs/{id}                 - alias of cancel
 ```
 
 ## MCP Integration
@@ -171,6 +176,36 @@ Deferred. See roadmap.
 
 ## Recently Landed
 
+- **Job-scoped workflow snapshots in Active mode (2026-07-19)**: Fixes payload
+  edits in Active mode never persisting (root cause: `_ActiveInjectSection`
+  buffer was runtime-only, so job restarts redeployed stale disk YAML).
+  THRT `Job.Manager` now stores the launched YAML in the job row and exposes
+  it as `content` on all `/api/v1/jobs/*` responses. Frontend: launching or
+  selecting a job parses that YAML into `jobDocumentsProvider` (keyed by job
+  id) — an independent copy. Canvas + drawer bind to the derived
+  `canvasWorkflowProvider` (job doc in Active mode, `workflowProvider`
+  otherwise); all mutations route through `updateCanvasWorkflow` /
+  `updateCanvasNode` (mode_provider.dart), so job edits bypass autosave and
+  never touch the stored workflow. Node repositioning is enabled in Active
+  mode (job-local). Node drawer gains tab parity in job view: a runtime
+  `job` tab (default, old JobLogView) plus the builder's
+  node/payload/prompt/result tabs bound to the job doc. JobBar `reload`
+  button = kill + re-sync + relaunch (cancel → create → fresh snapshot from
+  `newJob.content`), discarding job-local edits. Inject buffer keys are
+  job-scoped (`injectBufferKey` in thrt_provider.dart).
+- **Inject trigger cap on canvas nodes (2026-07-19)**: `source.inject` nodes
+  get a trigger button in Active mode when the flow is deployed — the left
+  colorized cap gains a pulsing accent glow (same animation as the active
+  chip's status dot) and click cursor. Taps are routed in the canvas's node
+  `GestureDetector.onTapUp` via `localPosition.dx <= 30` because a nested
+  detector on the cap loses the gesture arena to the parent node detector.
+  In-flight inject shows a spinner in the cap. Icons: `source.inject` → play
+  triangle, `delay` → stopwatch (canvas + node picker). Canvas now also polls
+  the current workflow's THRT status every 1s while in Active mode
+  (`_pollActiveFlow`), independent of the (unimplemented) jobs backend — this
+  is what populates `flowStatusProvider` for badges, the drawer trigger and
+  the cap. Shared `triggerNodeInject(WidgetRef, ...)` helper in
+  `thrt_provider.dart` (drawer + canvas).
 - **Namespaced module system + multi-project THRT (2026-07-19)**: Linked
   packages register node types only as `mod.<package>.<type>` (bare linked
   types hard-fail). Package manifests (`thrt_package.yaml`) require `name` +

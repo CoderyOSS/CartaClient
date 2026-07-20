@@ -11,6 +11,10 @@ class JobDto {
   final String? finishedAt;
   final int nodeCount;
 
+  /// YAML the job was launched with (snapshot stored by THRT at create
+  /// time). Null for jobs created before snapshots existed.
+  final String? content;
+
   const JobDto({
     required this.id,
     required this.flowName,
@@ -19,6 +23,7 @@ class JobDto {
     required this.startedAt,
     this.finishedAt,
     this.nodeCount = 0,
+    this.content,
   });
 
   factory JobDto.fromJson(Map<String, dynamic> json) {
@@ -30,6 +35,7 @@ class JobDto {
       startedAt: json['started_at'] as String,
       finishedAt: json['finished_at'] as String?,
       nodeCount: (json['node_count'] as int?) ?? 0,
+      content: json['content'] as String?,
     );
   }
 

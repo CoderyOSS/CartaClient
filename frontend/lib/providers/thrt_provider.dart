@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/thrt_api.dart';
+import '../widgets/mode_rail.dart';
+import 'mode_provider.dart';
 
 /// THRT runtime API client. Targets the same-origin Bun proxy at
 /// `trailhead.rancidgrandmas.online`, which forwards `/api/v1/workflows/*`
@@ -12,10 +14,36 @@ final thrtApiProvider = Provider<ThrtApi>((ref) {
 final flowStatusProvider =
     StateProvider<Map<String, FlowStatus>>((ref) => const {});
 
-/// Active-mode in-memory inject buffer. Keyed `${workflowName}:${nodeId}`.
-/// Initialized from the node's YAML `payload_code` on first open; runtime
-/// edits here never write back to YAML.
+/// POST [code] to the inject endpoint for [nodeId], then refresh the flow's
+/// runtime status so counters/badges update everywhere.
+Future<void> triggerNodeInject(
+  WidgetRef ref,
+  String workflowName,
+  String nodeId,
+  String code,
+) async {
+  await ref.read(thrtApiProvider).injectCode(workflowName, nodeId, code);
+  final status = await ref.read(thrtApiProvider).status(workflowName);
+  ref.read(flowStatusProvider.notifier).state =
+      Map<String, FlowStatus>.from(ref.read(flowStatusProvider))
+        ..[workflowName] = status;
+}
+
+/// Active-mode in-memory inject buffer. Keyed by [injectBufferKey].
+/// Initialized from the node's `payload_code` on first open; runtime edits
+/// here never write back to YAML.
 final injectBufferProvider = StateProvider<Map<String, String>>((ref) => const {});
+
+/// Buffer key for inject payloads: job-scoped in Active mode (per job
+/// snapshot), workflow-scoped otherwise.
+String injectBufferKey(WidgetRef ref, String nodeId) {
+  final job = ref.read(selectedJobProvider);
+  if (ref.read(modeProvider) == AppMode.active && job != null) {
+    return 'job:${job.id}:$nodeId';
+  }
+  final wf = ref.read(workflowProvider);
+  return '${wf.name}:$nodeId';
+}
 
 /// Node modules installed in the connected runtime. Drives the dynamic
 /// "INSTALLED MODULES" category in the add-node picker and actor/function

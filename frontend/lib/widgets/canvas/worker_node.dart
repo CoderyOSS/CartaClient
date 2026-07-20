@@ -12,6 +12,17 @@ class WorkerNode extends StatelessWidget {
   final TrailheadIconData icon;
   final VoidCallback? onEnter;
   final VoidCallback? onExit;
+
+  /// Active-mode trigger affordance on the left cap (source.inject nodes on
+  /// a deployed flow): pulsing glow + click cursor. The actual tap routing
+  /// lives in the canvas's node GestureDetector (nested detectors lose the
+  /// gesture arena to the parent node detector). When false the cap stays
+  /// purely decorative.
+  final bool triggerable;
+
+  /// An inject is in flight — cap shows a spinner.
+  final bool triggering;
+
   WorkerNode({
     super.key,
     required this.node,
@@ -20,6 +31,8 @@ class WorkerNode extends StatelessWidget {
     this.icon = TrailheadIconData.bot,
     this.onEnter,
     this.onExit,
+    this.triggerable = false,
+    this.triggering = false,
   });
 
   @override
@@ -99,19 +112,33 @@ class WorkerNode extends StatelessWidget {
                 decoration: BoxDecoration(gradient: bgGradient),
                 child: Row(
                   children: [
-                    Container(
-                      width: 30,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.crustGradient,
-                        border: Border(
-                          right: BorderSide(color: AppColors.border2),
+                    MouseRegion(
+                      cursor: triggerable && !triggering
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.basic,
+                      child: Container(
+                        width: 30,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.crustGradient,
+                          border: Border(
+                            right: BorderSide(color: AppColors.border2),
+                          ),
                         ),
-                      ),
-                      child: Center(
-                        child: TrailheadIcon(
-                          icon: icon,
-                          size: 14,
-                          color: AppColors.accentInk,
+                        child: Center(
+                          child: triggering
+                              ? SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.accentInk,
+                                  ),
+                                )
+                              : TrailheadIcon(
+                                  icon: icon,
+                                  size: 14,
+                                  color: AppColors.accentInk,
+                                ),
                         ),
                       ),
                     ),
@@ -151,7 +178,16 @@ class WorkerNode extends StatelessWidget {
               ),
             ),
           ),
-          // Layer 2: border overlay
+          // Layer 2: pulsing trigger glow (outside ClipRRect so it spills)
+          if (triggerable)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 30,
+              child: IgnorePointer(child: _TriggerCapGlow()),
+            ),
+          // Layer 3: border overlay
           Container(
             width: 168,
             height: 36,
@@ -195,6 +231,61 @@ class WorkerNode extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Pulsing accent glow behind the trigger cap. Same timing/intensity as the
+/// pulsing status dot on the active chip (`status_tag.dart`).
+class _TriggerCapGlow extends StatefulWidget {
+  @override
+  State<_TriggerCapGlow> createState() => _TriggerCapGlowState();
+}
+
+class _TriggerCapGlowState extends State<_TriggerCapGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_controller.value);
+        final blur = 2.0 + 7.0 * t;
+        final spread = 0.0 + 2.0 * t;
+        final alpha = (0.14 * 255 + 0.54 * 255 * t).round();
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.horizontal(
+              left: Radius.circular(AppRadius.md),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accent.withAlpha(alpha),
+                blurRadius: blur,
+                spreadRadius: spread,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

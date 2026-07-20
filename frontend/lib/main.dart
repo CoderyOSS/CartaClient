@@ -172,10 +172,14 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
     });
 
     final selectedNode = selectedNodeId != null
-        ? workflow.nodes.cast<WorkflowNode?>().firstWhere(
-            (n) => n!.id == selectedNodeId,
-            orElse: () => null,
-          )
+        ? ref
+            .watch(canvasWorkflowProvider)
+            .nodes
+            .cast<WorkflowNode?>()
+            .firstWhere(
+              (n) => n!.id == selectedNodeId,
+              orElse: () => null,
+            )
         : null;
 
     final drawerView = (mode == AppMode.active || mode == AppMode.history) && job != null
@@ -308,6 +312,7 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
                 orElse: () => null,
               );
               if (job != null) {
+                ensureJobDocument(ref, job);
                 ref.read(selectedJobProvider.notifier).state = job;
               }
             });
@@ -325,6 +330,7 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
                 orElse: () => null,
               );
               if (job != null) {
+                ensureJobDocument(ref, job);
                 ref.read(selectedJobProvider.notifier).state = job;
               }
             });

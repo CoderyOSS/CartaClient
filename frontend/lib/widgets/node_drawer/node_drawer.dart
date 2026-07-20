@@ -57,21 +57,37 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
   }
 
   void _updateLabel(String value) {
-    final wf = ref.read(workflowProvider);
-    ref.read(workflowProvider.notifier).state = wf.copyWith(
-      nodes: wf.nodes.map((n) {
-        if (n.id == widget.node.id) {
-          return n.copyWith(label: value);
-        }
-        return n;
-      }).toList(),
-    );
+    updateCanvasNode(ref, widget.node.id, (n) => n.copyWith(label: value));
   }
 
   @override
   Widget build(BuildContext context) {
     final tabsMap = ref.watch(nodeDrawerTabProvider);
-    final _tab = tabsMap[_tabKey] ?? 'settings';
+    final isWorker = widget.node.kind == 'genserver' || widget.node.kind == 'task' || widget.node.kind == 'delay' || widget.node.kind == 'http.server.ingress' || widget.node.kind == 'http.server.egress' || widget.node.kind == 'http.client.request' || widget.node.kind == 'source.inject' || widget.node.kind == 'sink.log';
+    final isBuilder = widget.view == NodeDrawerView.builder;
+
+    // Job view prepends a runtime 'job' tab (executions + inject trigger)
+    // and defaults to it; the remaining editor tabs mirror builder mode and
+    // edit the job's workflow snapshot (never the stored workflow).
+    final editorTabs = isWorker
+        ? (widget.node.kind == 'source.inject'
+            ? [
+                _Tab(value: 'settings', label: 'node'),
+                _Tab(value: 'payload', label: 'payload'),
+                _Tab(value: 'prompt', label: 'prompt'),
+                _Tab(value: 'result', label: 'result'),
+              ]
+            : [
+                _Tab(value: 'settings', label: 'node'),
+                _Tab(value: 'prompt', label: 'prompt'),
+                _Tab(value: 'result', label: 'result'),
+              ])
+        : [_Tab(value: 'settings', label: 'routing')];
+    final tabs = isBuilder
+        ? editorTabs
+        : [_Tab(value: 'job', label: 'job'), ...editorTabs];
+    final defaultTab = isBuilder ? 'settings' : 'job';
+    final _tab = tabsMap[_tabKey] ?? defaultTab;
     final meta = widget.node.kind == 'genserver'
         ? 'genserver node'
         : widget.node.kind == 'task'
@@ -91,24 +107,6 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
                             : widget.node.kind == 'sink.log'
                                 ? 'log sink node'
                                 : 'node';
-
-    final isWorker = widget.node.kind == 'genserver' || widget.node.kind == 'task' || widget.node.kind == 'delay' || widget.node.kind == 'http.server.ingress' || widget.node.kind == 'http.server.egress' || widget.node.kind == 'http.client.request' || widget.node.kind == 'source.inject' || widget.node.kind == 'sink.log';
-    final isBuilder = widget.view == NodeDrawerView.builder;
-
-    final tabs = isWorker
-        ? (widget.node.kind == 'source.inject'
-            ? [
-                _Tab(value: 'settings', label: 'node'),
-                _Tab(value: 'payload', label: 'payload'),
-                _Tab(value: 'prompt', label: 'prompt'),
-                _Tab(value: 'result', label: 'result'),
-              ]
-            : [
-                _Tab(value: 'settings', label: 'node'),
-                _Tab(value: 'prompt', label: 'prompt'),
-                _Tab(value: 'result', label: 'result'),
-              ])
-        : [_Tab(value: 'settings', label: 'routing')];
 
     return Container(
       width: widget.isPortrait ? double.infinity : 460,
@@ -184,7 +182,7 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${widget.node.id} \u00b7 $meta${!isBuilder ? " \u00b7 log" : ""}',
+                        '${widget.node.id} \u00b7 $meta${!isBuilder ? " \u00b7 job" : ""}',
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 10.5,
@@ -218,8 +216,8 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
               ],
             ),
           ),
-          // Tabs (builder only)
-          if (isBuilder && tabs.length > 1)
+          // Tabs
+          if (tabs.length > 1)
             Container(
               decoration: BoxDecoration(
                 color: AppColors.bg2,
@@ -228,13 +226,14 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
                 ),
               ),
               child: Row(
-                children: tabs.map((t) => _buildTab(t)).toList(),
+                children: tabs.map((t) => _buildTab(t, defaultTab)).toList(),
               ),
             ),
           // Body
           Expanded(
-            child: isBuilder
-                ? (_tab == 'settings'
+            child: !isBuilder && _tab == 'job'
+                ? JobLogView(node: widget.node)
+                : (_tab == 'settings'
                     ? EditorSettingsTab(node: widget.node)
                     : _tab == 'payload'
                         ? EditorPayloadTab(node: widget.node)
@@ -242,17 +241,16 @@ class _NodeDrawerState extends ConsumerState<NodeDrawer> {
                             ? EditorPromptTab(node: widget.node)
                             : _tab == 'result'
                                 ? EditorResultTab(node: widget.node)
-                                : const SizedBox.shrink())
-                : JobLogView(node: widget.node),
+                                : const SizedBox.shrink()),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTab(_Tab t) {
+  Widget _buildTab(_Tab t, String defaultTab) {
     final tabsMap = ref.watch(nodeDrawerTabProvider);
-    final tab = tabsMap[_tabKey] ?? 'settings';
+    final tab = tabsMap[_tabKey] ?? defaultTab;
     final active = tab == t.value;
     return GestureDetector(
       onTap: () {

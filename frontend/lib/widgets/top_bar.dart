@@ -11,6 +11,7 @@ import '../providers/mode_provider.dart';
 import '../providers/mock_data.dart' show WorkflowSummary;
 import '../providers/selection_notifier.dart';
 import '../utils/workflow_to_yaml.dart';
+import '../utils/yaml_to_workflow.dart';
 import '../services/jobs_api.dart';
 import '../models/job_state.dart';
 import 'icons.dart';
@@ -1061,6 +1062,13 @@ class _BuildBar extends ConsumerWidget {
               final jobsApi = ref.read(jobsApiProvider);
               final job = await jobsApi.create(wf.name);
               ref.invalidate(jobsProvider);
+              // Snapshot the launched workflow as the job's independent
+              // document — Active-mode edits never touch the workflow.
+              ref.read(jobDocumentsProvider.notifier).update((docs) {
+                final m = Map<String, WorkflowSummary>.from(docs);
+                m[job.id] = wf;
+                return m;
+              });
               ref.read(selectedJobProvider.notifier).state = job;
               ref.read(modeProvider.notifier).state = AppMode.active;
             } catch (e) {
@@ -1396,16 +1404,80 @@ class _JobControls extends ConsumerWidget {
                 ),
               ),
             ),
-          _CtrlBtn(
-            onTap: () {
-              ref.invalidate(jobsProvider);
-              ref.read(autoRefreshJobsProvider.notifier).state++;
-            },
-            icon: TrailheadIcon(
-              icon: TrailheadIconData.refresh,
-              size: 11,
-              color: AppColors.fg0,
+          if (job.jobState == JobState.running)
+            _CtrlBtn(
+              onTap: () => _reloadJob(context, ref, job),
+              label: 'reload',
+              icon: TrailheadIcon(
+                icon: TrailheadIconData.refresh,
+                size: 11,
+                color: AppColors.fg0,
+              ),
+            )
+          else
+            _CtrlBtn(
+              onTap: () {
+                ref.invalidate(jobsProvider);
+                ref.read(autoRefreshJobsProvider.notifier).state++;
+              },
+              icon: TrailheadIcon(
+                icon: TrailheadIconData.refresh,
+                size: 11,
+                color: AppColors.fg0,
+              ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Kill the job, re-sync it to the current stored workflow, and relaunch.
+  /// The new job gets a fresh snapshot parsed from the YAML THRT redeploys;
+  /// the old job's snapshot (with any Active-mode edits) is discarded.
+  void _reloadJob(BuildContext context, WidgetRef ref, JobDto job) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bg2,
+        title: Text('Reload job?', style: TextStyle(color: AppColors.fg0)),
+        content: Text(
+          'Stops this job and relaunches it from the current workflow. Unsaved job edits will be lost.',
+          style: TextStyle(color: AppColors.fg2),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('keep running'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final api = ref.read(jobsApiProvider);
+                await api.cancel(job.id);
+                final newJob = await api.create(job.flowName);
+                // Fresh snapshot from the YAML the new job deployed with.
+                ref.read(jobDocumentsProvider.notifier).update((docs) {
+                  final m = Map<String, WorkflowSummary>.from(docs)..remove(job.id);
+                  final content = newJob.content;
+                  if (content != null) {
+                    try {
+                      m[newJob.id] = yamlToWorkflow(newJob.flowName, content);
+                    } catch (_) {}
+                  }
+                  return m;
+                });
+                ref.invalidate(jobsProvider);
+                ref.read(selectedJobProvider.notifier).state = newJob;
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('reload failed: $e')),
+                  );
+                }
+              }
+            },
+            child: Text('reload', style: TextStyle(color: AppColors.accent)),
           ),
         ],
       ),

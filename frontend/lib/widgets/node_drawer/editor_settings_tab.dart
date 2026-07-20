@@ -75,10 +75,7 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
   }
 
   void _updateNode(WorkflowNode updated) {
-    final wf = ref.read(workflowProvider);
-    ref.read(workflowProvider.notifier).state = wf.copyWith(
-      nodes: wf.nodes.map((n) => n.id == updated.id ? updated : n).toList(),
-    );
+    updateCanvasNode(ref, updated.id, (_) => updated);
   }
 
   @override
@@ -160,23 +157,25 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
               outputs: node.outputs,
               matchAll: node.matchAll,
               onUpdate: (outputs, matchAll, removedIndex) {
-                var wf = ref.read(workflowProvider);
+                updateCanvasWorkflow(ref, (wf) {
+                  var next = wf;
                   if (removedIndex != null) {
-                  wf = wf.copyWith(
-                    connections: wf.connections
-                        .where((e) => !(e.from == node.id && e.sourcePort == removedIndex))
-                        .map((e) {
-                      if (e.from == node.id && e.sourcePort != null && e.sourcePort! > removedIndex) {
-                        return e.copyWith(sourcePort: e.sourcePort! - 1);
-                      }
-                      return e;
-                    })
-                        .toList(),
+                    next = next.copyWith(
+                      connections: next.connections
+                          .where((e) => !(e.from == node.id && e.sourcePort == removedIndex))
+                          .map((e) {
+                        if (e.from == node.id && e.sourcePort != null && e.sourcePort! > removedIndex) {
+                          return e.copyWith(sourcePort: e.sourcePort! - 1);
+                        }
+                        return e;
+                      })
+                          .toList(),
+                    );
+                  }
+                  return next.copyWith(
+                    nodes: next.nodes.map((n) => n.id == node.id ? n.copyWith(outputs: outputs, matchAll: matchAll) : n).toList(),
                   );
-                }
-                ref.read(workflowProvider.notifier).state = wf.copyWith(
-                  nodes: wf.nodes.map((n) => n.id == node.id ? n.copyWith(outputs: outputs, matchAll: matchAll) : n).toList(),
-                );
+                });
               },
             ),
           ] else if (isDelay) ...[
@@ -410,7 +409,7 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
   }
 
   void _maybeHotToggle(WorkflowNode node, {bool? logIn, bool? logOut}) {
-    final wf = ref.read(workflowProvider);
+    final wf = ref.read(canvasWorkflowProvider);
     final statuses = ref.read(flowStatusProvider);
     final status = statuses[wf.name];
     if (status == null || !status.deployed) return;
@@ -1264,9 +1263,9 @@ class _ServerDropdown extends ConsumerWidget {
             ...current,
             server,
           ];
-          final wf = widgetRef.read(workflowProvider);
-          widgetRef.read(workflowProvider.notifier).state = wf.copyWith(
-            servers: [...wf.servers, server],
+          updateCanvasWorkflow(
+            widgetRef,
+            (wf) => wf.copyWith(servers: [...wf.servers, server]),
           );
           onChanged(server.id);
         },
