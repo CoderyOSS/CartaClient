@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
+import 'instance_section.dart';
 import 'modules_section.dart';
 import 'packages_section.dart';
 import 'package:flutter/material.dart' as m;
@@ -42,6 +43,7 @@ const _sections = [
   _SectionMeta(value: 'messaging',  label: 'Messaging',  icon: TrailheadIconData.send),
   _SectionMeta(value: 'modules',    label: 'Modules',    icon: TrailheadIconData.plug),
   _SectionMeta(value: 'packages',   label: 'Packages',   icon: TrailheadIconData.globe),
+  _SectionMeta(value: 'instance',   label: 'Instance',   icon: TrailheadIconData.terminal),
 ];
 
 // ---------------------------------------------------------------------------
@@ -390,6 +392,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog>
         return const ModulesSection();
       case 'packages':
         return const PackagesSection();
+      case 'instance':
+        return const InstanceSection();
       default:
         return const SizedBox.shrink();
     }

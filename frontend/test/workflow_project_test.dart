@@ -20,18 +20,14 @@ nodes: []
       expect(wf.project, isNull);
     });
 
-    test('workflowToYaml emits project: after version', () {
+    test('workflowToYaml never emits project: (deprecated key)', () {
       final wf = yamlToWorkflow('w', '''
 name: w
 version: 1
 project: /home/gem/projects/TrailheadTests
 nodes: []
 ''');
-      final yaml = workflowToYaml(wf);
-      expect(
-        yaml,
-        contains('version: 1\nproject: /home/gem/projects/TrailheadTests\n'),
-      );
+      expect(workflowToYaml(wf), isNot(contains('project:')));
     });
 
     test('workflowToYaml omits project when null', () {

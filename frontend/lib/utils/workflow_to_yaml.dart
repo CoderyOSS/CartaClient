@@ -17,9 +17,9 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
   if (workflow.draft != null && workflow.draft != workflow.version) {
     buf.writeln('draft: ${workflow.draft}');
   }
-  if (workflow.project != null) {
-    buf.writeln('project: ${workflow.project}');
-  }
+  // The `project:` key is deprecated: local-install mode resolves mod.* types
+  // against the open project. Still parsed on read (backward compat), never
+  // emitted on write.
 
   // Servers section
   if (workflow.servers.isNotEmpty) {
