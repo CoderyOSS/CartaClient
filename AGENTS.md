@@ -397,10 +397,10 @@ mix test
    upgrade headers landed in `CoderyOSS/Codery` (`c7db390`) and are live. Log
    stream verified end-to-end: browser → Caddy → Nginx → Bun bridge → THRT
    (`wss://trailhead.rancidgrandmas.online/api/v1/workflows/:name/logs/stream`
-   returns 101 + frames). Note: `logging_enabled` is a **build-time** codegen
-   gate for function nodes — flows deployed before the flag was added to YAML
-   must be redeployed to emit frames. Actor-node `log_in`/`log_out` are
-   runtime-hot-toggleable via PATCH.
+   returns 101 + frames). Log hooks are runtime-only: `exec/3` checks
+   `log_in`/`log_out` flags on every message; no redeploy needed for toggles.
+   The `logging_enabled` YAML key no longer gates anything (consumed only as
+   seed for runtime flags if present).
 3. **Client deployment modes** — Two connection models with different CORS requirements:
    - **Web (current)**: Flutter SPA served by Bun proxy → THRT same-origin. No CORS needed. Simplest deployment.
    - **Native iOS (planned)**: App connects directly to THRT like a database client (e.g. MongoDB Compass → remote server). Requires CORS support on THRT. Not yet implemented.
@@ -427,6 +427,8 @@ CoderyTrailhead/
 ├── lib/thrt/
 │   ├── api.ex
 │   ├── engine.ex
+│   ├── runtime.ex                  ← call adapters for exec graph entries
+│   ├── graphs.ex                   ← ETS store for compiled exec graphs
 │   ├── store.ex
 │   ├── yaml.ex
 │   ├── elixir_term.ex              ← literal-only Elixir source parser
