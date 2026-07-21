@@ -66,7 +66,7 @@ class _PackagesSectionState extends ConsumerState<PackagesSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Install failed: $e',
+            content: SelectableText('Install failed: $e',
                 style: const TextStyle(fontFamily: 'monospace')),
             backgroundColor: AppColors.danger,
           ),
@@ -83,7 +83,7 @@ class _PackagesSectionState extends ConsumerState<PackagesSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Uninstall failed: $e',
+            content: SelectableText('Uninstall failed: $e',
                 style: const TextStyle(fontFamily: 'monospace')),
             backgroundColor: AppColors.danger,
           ),
@@ -158,7 +158,7 @@ class _PackagesSectionState extends ConsumerState<PackagesSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Restart failed: $e',
+        content: SelectableText('Restart failed: $e',
                 style: const TextStyle(fontFamily: 'monospace')),
             backgroundColor: AppColors.danger,
           ),
@@ -322,7 +322,7 @@ class _PackagesSectionState extends ConsumerState<PackagesSection> {
   Widget _errorRow(String msg) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(msg,
+      child: SelectableText(msg,
           style: TextStyle(
               fontFamily: 'monospace', fontSize: 12, color: AppColors.danger)),
     );
@@ -430,7 +430,7 @@ class _SearchField extends StatelessWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text('Search failed: $e',
+                child: SelectableText('Search failed: $e',
                     style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 12,
@@ -822,7 +822,7 @@ class _PendingRow extends StatelessWidget {
                 if (errored && reason != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('error: $reason',
+                    child: SelectableText('error: $reason',
                         style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 10,
