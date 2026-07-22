@@ -20,6 +20,8 @@ Flutter SPA for Trailhead workflow visualization and management. Follows the Cod
 | SVG icons | `lib/widgets/icons.dart` | 12 Lucide stroke icons via `flutter_svg` |
 | Mode rail | `lib/widgets/mode_rail.dart` | 52px ConsumerWidget rail, reads/writes `modeProvider` |
 | Top bar | `lib/widgets/top_bar.dart` | ConsumerWidget — BuildBar, JobBar (active: job dropdown + YAML/stop/reload + status chip), HistoryListBar per mode |
+| **Flow tab strip** | `lib/widgets/topbar/flow_tab_strip.dart` | Node-RED-style tabs in BuildBar: one tab per flow + session subflow tabs (git-branch icon, info tint), drag-reorder → `PUT flow-order`, context/long-press menu (rename = create+delete+switch, delete w/ confirm), `+` menu (untitled[-N] flow/subflow), per-tab deploy dot |
+| **Flow tab state** | `lib/providers/flow_tabs_provider.dart` | `flowTabsProvider`, `activeTabKindProvider` (autosave routes to subflows CRUD on subflow tabs), `flowTabSyncProvider` (reconciles tabs with remote list + `flow_order`, rename detection), `switchToTab`/`openSubflowTab`/`createUntitled*` |
 | App button | `lib/widgets/app_button.dart` | ghost/secondary/trail/primary/danger variants |
 | Status tag | `lib/widgets/status_tag.dart` | StatusDot (with pulse) + StatusTag (colored pill) |
 | State providers | `lib/providers/mode_provider.dart` | `modeProvider`, `selectedJobProvider`, `workflowProvider` |
@@ -97,6 +99,11 @@ proxy to `/api/v1/workflows/:name/deploy|status|inject|log-flags|logs/stream`.
 ### Autosave
 Canvas edits trigger debounced (800ms) `PUT /workflows/{name}` via the autosave
 listener in `lib/main.dart`. The `workflowDirtyProvider` tracks unsaved state.
+On subflow tabs (`activeTabKindProvider`) the same pipeline saves via
+`PUT /subflows/{name}` and skips server-side flow validation (param
+placeholders would false-positive). Subflow-only top-level keys (`params`,
+`inputs`, `outputs`) round-trip through `WorkflowSummary.subflowParams` /
+`subflowInputs` / `subflowOutputs`.
 
 ### Job snapshots (Active mode)
 
@@ -193,6 +200,8 @@ frontend/
 │       ├── runs_table.dart    # Grouped/flat history runs table
 │       ├── status_tag.dart    # StatusDot + StatusTag
 │       ├── top_bar.dart       # TopBar (ConsumerWidget) + BuildBar/JobBar/HistoryListBar
+│       ├── topbar/
+│       │   └── flow_tab_strip.dart     # Node-RED-style flow/subflow tabs
 │       ├── view_toggle.dart   # Grouped/flat view toggle
 │       └── yaml_drawer.dart   # Right slide-over, syntax-highlighted YAML
 ├── serve.js                   # Bun static server for dev preview

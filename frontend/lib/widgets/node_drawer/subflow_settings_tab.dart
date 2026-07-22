@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/workflow_node.dart';
+import '../../providers/flow_tabs_provider.dart';
 import '../../providers/mode_provider.dart';
 import '../../providers/modules_provider.dart';
+import '../../providers/subflows_provider.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/app_button.dart';
 import '../../widgets/icons.dart';
+import '../../widgets/mode_rail.dart';
 import 'node_drawer.dart' show Field;
 
 /// Drawer body for `type: subflow` nodes. Lets the user pick which packaged
@@ -56,6 +60,31 @@ class _SubflowSettingsTabState extends ConsumerState<SubflowSettingsTab> {
     }
     cfg.addAll(_paramValues);
     updateCanvasNode(ref, widget.node.id, (n) => n.copyWith(config: cfg));
+  }
+
+  /// Resolve the node's selected subflow to a project subflow (subflows/
+  /// dir, listed by the CRUD) and open it as a tab. Packaged subflows only
+  /// land locally on first deploy — if there is no local copy yet, say so.
+  Future<void> _openSubflowTab(BuildContext context) async {
+    final full = '$_selectedModule/$_selectedSubflow';
+    final subflows = ref.read(subflowsProvider).valueOrNull ?? [];
+    String? localName;
+    for (final s in subflows) {
+      if (s.name == full || s.name == _selectedSubflow) {
+        localName = s.name;
+        break;
+      }
+    }
+    if (localName == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'no local copy yet — deploy once to copy this subflow into the project'),
+        ),
+      );
+      return;
+    }
+    await openSubflowTab(ref, localName);
   }
 
   @override
@@ -156,6 +185,24 @@ class _SubflowSettingsTabState extends ConsumerState<SubflowSettingsTab> {
             ),
           ),
           const SizedBox(height: 14),
+
+          // Open the project's local copy of this subflow as a TopBar tab.
+          if (_selectedModule != null &&
+              _selectedSubflow != null &&
+              ref.watch(modeProvider) == AppMode.build)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AppButton(
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.sm,
+                  icon: TrailheadIconData.pencil,
+                  label: 'edit subflow',
+                  onTap: () => _openSubflowTab(context),
+                ),
+              ),
+            ),
 
           // Param fields (loaded from subflow meta).
           if (_selectedModule != null && _selectedSubflow != null)

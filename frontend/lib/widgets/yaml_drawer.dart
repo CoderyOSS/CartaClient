@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/tokens.dart';
 import '../providers/api_provider.dart';
+import '../providers/flow_tabs_provider.dart';
 import '../providers/mode_provider.dart';
 import '../providers/mock_data.dart' show WorkflowSummary;
+import '../providers/subflows_provider.dart';
 import '../services/jobs_api.dart';
 import '../utils/workflow_to_yaml.dart';
 import '../utils/yaml_to_workflow.dart';
@@ -42,15 +44,26 @@ class _YamlDrawerState extends ConsumerState<YamlDrawer> {
   /// Refetch the stored workflow YAML from the backend and replace the
   /// active canvas model. The drawer itself compiles from the canvas model,
   /// so this is how server-side changes (or a stale local draft) get pulled.
+  /// Subflow tabs refetch through the subflow CRUD.
   Future<void> _reload() async {
     if (_reloading) return;
     setState(() => _reloading = true);
     try {
-      final api = ref.read(workflowsApiProvider);
-      final dto = await api.get(widget.workflow.name);
-      final updated = yamlToWorkflow(dto.name, dto.content);
-      ref.read(workflowProvider.notifier).state = updated;
-      ref.invalidate(remoteWorkflowsProvider);
+      if (ref.read(activeTabKindProvider) == FlowTabKind.subflow) {
+        final dto =
+            await ref.read(subflowsApiProvider).get(widget.workflow.name);
+        final tab = FlowTab(FlowTabKind.subflow, dto.name);
+        final updated =
+            yamlToWorkflow(dto.name, dto.content).copyWith(id: tab.docId);
+        ref.read(workflowProvider.notifier).state = updated;
+        ref.invalidate(subflowsProvider);
+      } else {
+        final api = ref.read(workflowsApiProvider);
+        final dto = await api.get(widget.workflow.name);
+        final updated = yamlToWorkflow(dto.name, dto.content);
+        ref.read(workflowProvider.notifier).state = updated;
+        ref.invalidate(remoteWorkflowsProvider);
+      }
     } catch (e) {
       debugPrint('yaml reload failed: $e');
     } finally {

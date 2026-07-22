@@ -30,6 +30,13 @@ class WorkflowSummary {
   /// UI shows an "incompatible format" badge and restricts to delete-only.
   final String? parseError;
 
+  /// Subflow-only keys, carried through so subflow tab editing round-trips
+  /// them (`params:`, `inputs:`, `outputs:` at document top level). Always
+  /// empty for plain flows.
+  final List<String> subflowParams;
+  final Map<String, String> subflowInputs;
+  final Map<String, String> subflowOutputs;
+
   const WorkflowSummary({
     required this.id,
     required this.name,
@@ -45,6 +52,9 @@ class WorkflowSummary {
     this.project,
     this.remoteContent,
     this.parseError,
+    this.subflowParams = const [],
+    this.subflowInputs = const {},
+    this.subflowOutputs = const {},
   });
 
   /// Placeholder for workflows whose YAML could not be parsed into the canvas
@@ -81,6 +91,9 @@ class WorkflowSummary {
     Object? project = _unset,
     String? remoteContent,
     String? parseError,
+    List<String>? subflowParams,
+    Map<String, String>? subflowInputs,
+    Map<String, String>? subflowOutputs,
   }) {
     return WorkflowSummary(
       id: id ?? this.id,
@@ -97,6 +110,9 @@ class WorkflowSummary {
       project: project == _unset ? this.project : project as String?,
       remoteContent: remoteContent ?? this.remoteContent,
       parseError: parseError ?? this.parseError,
+      subflowParams: subflowParams ?? this.subflowParams,
+      subflowInputs: subflowInputs ?? this.subflowInputs,
+      subflowOutputs: subflowOutputs ?? this.subflowOutputs,
     );
   }
 }

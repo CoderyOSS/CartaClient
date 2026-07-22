@@ -21,6 +21,24 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
   // against the open project. Still parsed on read (backward compat), never
   // emitted on write.
 
+  // Subflow-only keys (empty for plain flows — omitted then).
+  if (workflow.subflowParams.isNotEmpty) {
+    buf.writeln(
+        'params: [${workflow.subflowParams.map((p) => '"$p"').join(', ')}]');
+  }
+  if (workflow.subflowInputs.isNotEmpty) {
+    buf.writeln('inputs:');
+    for (final e in workflow.subflowInputs.entries) {
+      buf.writeln('  ${e.key}: "${e.value}"');
+    }
+  }
+  if (workflow.subflowOutputs.isNotEmpty) {
+    buf.writeln('outputs:');
+    for (final e in workflow.subflowOutputs.entries) {
+      buf.writeln('  ${e.key}: "${e.value}"');
+    }
+  }
+
   // Servers section
   if (workflow.servers.isNotEmpty) {
     buf.writeln('servers:');

@@ -6,7 +6,9 @@ import 'theme/theme_controller.dart';
 import 'providers/settings_provider.dart';
 import 'models/workflow_node.dart';
 import 'providers/api_provider.dart';
+import 'providers/flow_tabs_provider.dart';
 import 'providers/mode_provider.dart';
+import 'providers/subflows_provider.dart';
 import 'providers/thrt_provider.dart';
 import 'widgets/validation_banner.dart';
 import 'providers/mock_data.dart' show WorkflowSummary;
@@ -100,13 +102,24 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
       return;
     }
     final yaml = workflowToYaml(wf);
+    // Subflow tabs save through the subflow CRUD; flow tabs through the
+    // workflows CRUD. Everything else (debounce, dirty flag) is shared.
+    final isSubflowTab =
+        ref.read(activeTabKindProvider) == FlowTabKind.subflow;
     try {
-      final api = ref.read(workflowsApiProvider);
-      await api.replace(wf.name, yaml);
-      _lastSavedYaml = yaml;
-      // Update remote list so dropdown reflects new mtime if it changes.
-      ref.invalidate(remoteWorkflowsProvider);
+      if (isSubflowTab) {
+        await ref.read(subflowsApiProvider).replace(wf.name, yaml);
+        _lastSavedYaml = yaml;
+        ref.invalidate(subflowsProvider);
+        await ref.read(subflowsProvider.future);
+      } else {
+        final api = ref.read(workflowsApiProvider);
+        await api.replace(wf.name, yaml);
+        _lastSavedYaml = yaml;
+        // Update remote list so tabs reflect new mtime if it changes.
+        ref.invalidate(remoteWorkflowsProvider);
         await ref.read(remoteWorkflowsProvider.future);
+      }
     } catch (e) {
       debugPrint('autosave failed: $e');
     } finally {
@@ -117,8 +130,12 @@ class _TrailheadShellState extends ConsumerState<TrailheadShell> {
 
   /// Run THRT validation for the workflow and update the banner provider.
   /// Fire-and-forget: network failures keep the previous error state.
+  /// Subflow tabs skip validation — subflows aren't deployable standalone,
+  /// so flow validation would produce false positives (param placeholders).
   Future<void> _validate(WorkflowSummary wf, [String? yaml]) async {
-    if (wf.id == emptyWorkflowId || wf.parseError != null) {
+    if (wf.id == emptyWorkflowId ||
+        wf.parseError != null ||
+        ref.read(activeTabKindProvider) == FlowTabKind.subflow) {
       ref.read(validationErrorsProvider.notifier).state = const [];
       return;
     }

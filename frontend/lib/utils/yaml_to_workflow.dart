@@ -111,7 +111,21 @@ WorkflowSummary yamlToWorkflow(String name, String yamlText) {
     servers: serverDefs,
     project: _toStr(doc['project']),
     remoteContent: yamlText,
+    subflowParams: _toStringList(doc['params']),
+    subflowInputs: _toStringMap(doc['inputs']),
+    subflowOutputs: _toStringMap(doc['outputs']),
   );
+}
+
+/// Coerce a YAML map node to a string map (subflow `inputs:` / `outputs:`
+/// port bindings). Empty for missing/non-map values.
+Map<String, String> _toStringMap(dynamic node) {
+  if (node is YamlMap) {
+    return {
+      for (final e in node.entries) e.key.toString(): e.value.toString(),
+    };
+  }
+  return const {};
 }
 
 WorkflowNode _parseNode(YamlMap stage, int index) {
