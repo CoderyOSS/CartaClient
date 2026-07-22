@@ -5,7 +5,7 @@
     "semantic_hash": "758c5bf8bd1b695dd11523c800baf5c8"
   },
   "frontend/.dart_tool/dartpad/web_plugin_registrant.dart": {
-    "mtime": 1784672206.9174902,
+    "mtime": 1784679292.09674,
     "ast_hash": "5256cc49698b6509f42403c1f86ecb1b",
     "semantic_hash": ""
   },
@@ -45,12 +45,12 @@
     "semantic_hash": "770f4f65e02ca2fc57f46f4f4148d15d"
   },
   "frontend/ios/Runner/GeneratedPluginRegistrant.h": {
-    "mtime": 1784672207.298489,
+    "mtime": 1784679292.4497397,
     "ast_hash": "decb9041b5e91a07e66f4664e5dac408",
     "semantic_hash": "decb9041b5e91a07e66f4664e5dac408"
   },
   "frontend/ios/Runner/GeneratedPluginRegistrant.m": {
-    "mtime": 1784672207.3014889,
+    "mtime": 1784679292.4507396,
     "ast_hash": "efe843859d073e34bc63bb1d089af6a7",
     "semantic_hash": ""
   },
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/models/workflow_node.dart": {
-    "mtime": 1784658319.6044705,
-    "ast_hash": "0deb3c6a05080da00b5a6e9f32e57e7d",
+    "mtime": 1784678972.7156422,
+    "ast_hash": "1872dd5fef3f96b5b1ec942110a04737",
     "semantic_hash": ""
   },
   "frontend/lib/providers/canvas_controller.dart": {
@@ -165,8 +165,8 @@
     "semantic_hash": "9eaca0dd47eb1436f314cc0c865b1fb4"
   },
   "frontend/lib/utils/workflow_to_yaml.dart": {
-    "mtime": 1784672198.6775172,
-    "ast_hash": "0c70fadc777cc00a89fdcef986c29d92",
+    "mtime": 1784678972.7166424,
+    "ast_hash": "b67276bff215e480f4fc8af3118d9bad",
     "semantic_hash": ""
   },
   "frontend/lib/widgets/app_button.dart": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/widgets/canvas/graph_canvas.dart": {
-    "mtime": 1784664753.8830464,
-    "ast_hash": "eee13228bb2b304f409e56edf6332b6d",
+    "mtime": 1784679282.1147459,
+    "ast_hash": "32efa8dbf1fee247567cb6b6d9ba6ee0",
     "semantic_hash": ""
   },
   "frontend/lib/widgets/canvas/marquee_painter.dart": {
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/widgets/canvas/worker_node.dart": {
-    "mtime": 1784504848.2824433,
-    "ast_hash": "d6069625f2ea4beedb1d183ee13e4c34",
+    "mtime": 1784678972.7176423,
+    "ast_hash": "e5cdcf4dd0dcc0e2cc642282c9998961",
     "semantic_hash": ""
   },
   "frontend/lib/widgets/canvas/zoom_controls.dart": {
@@ -1945,8 +1945,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/utils/yaml_to_workflow.dart": {
-    "mtime": 1784658362.4223473,
-    "ast_hash": "a0c95485c1c18cb9fb2d12373a3fc43e",
+    "mtime": 1784678972.7166424,
+    "ast_hash": "838acd5a4b7403097f2a53275bf6b735",
     "semantic_hash": ""
   },
   "frontend/lib/widgets/empty_workflow_hero.dart": {
@@ -1995,8 +1995,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/widgets/node_drawer/editor_settings_tab.dart": {
-    "mtime": 1784583884.4939146,
-    "ast_hash": "d5c9d1cd6ea845a1e47e1d6d18f123d8",
+    "mtime": 1784678972.7186422,
+    "ast_hash": "6c4e3127adac3a788f7c5cbf2b4e3a39",
     "semantic_hash": ""
   },
   "frontend/lib/widgets/node_drawer/job_log_view.dart": {
@@ -2005,8 +2005,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/widgets/node_drawer/node_drawer.dart": {
-    "mtime": 1784658329.127443,
-    "ast_hash": "31dd6075b77d767d56efcba27ab655ca",
+    "mtime": 1784678972.7196422,
+    "ast_hash": "1f43a5f931c6d198f77a86309f78af02",
     "semantic_hash": ""
   },
   ".superpowers/sdd/task-2-brief.md": {
@@ -2020,22 +2020,22 @@
     "semantic_hash": ""
   },
   "frontend/test/failures/marquee_painter_isolatedDiff.png": {
-    "mtime": 1784672198.4745178,
+    "mtime": 1784678972.469642,
     "ast_hash": "ffd1e8e8091906322ce5cbeb7684ff53",
     "semantic_hash": ""
   },
   "frontend/test/failures/marquee_painter_maskedDiff.png": {
-    "mtime": 1784672198.459518,
+    "mtime": 1784678972.4476418,
     "ast_hash": "ffd1e8e8091906322ce5cbeb7684ff53",
     "semantic_hash": ""
   },
   "frontend/test/failures/marquee_painter_masterImage.png": {
-    "mtime": 1784672198.426518,
+    "mtime": 1784678972.4096417,
     "ast_hash": "3ea774141d70b2b5616dacaf2b2fcc44",
     "semantic_hash": ""
   },
   "frontend/test/failures/marquee_painter_testImage.png": {
-    "mtime": 1784672198.443518,
+    "mtime": 1784678972.4276419,
     "ast_hash": "d04b81a251b964b14ab6d4a38eaf9114",
     "semantic_hash": ""
   },
@@ -2085,8 +2085,8 @@
     "semantic_hash": ""
   },
   "frontend/lib/models/node_catalog.dart": {
-    "mtime": 1784658268.073619,
-    "ast_hash": "468253990c0eb63951d78db786d4d2f4",
+    "mtime": 1784678972.7156422,
+    "ast_hash": "b5863151b5e2b1809209213e39f6ee3d",
     "semantic_hash": ""
   },
   "frontend/lib/models/server_def.dart": {
@@ -2140,7 +2140,7 @@
     "semantic_hash": ""
   },
   "frontend/.dart_tool/flutter_build/dart_plugin_registrant.dart": {
-    "mtime": 1784672207.953487,
+    "mtime": 1784679236.2827663,
     "ast_hash": "75d59b80420856968e90f15d4a7178e0",
     "semantic_hash": ""
   },
