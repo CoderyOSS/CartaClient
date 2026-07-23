@@ -5,8 +5,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class LogFrame {
   final String nodeId;
   final String dir; // "in" or "out"
-  final int ts;
-  final int? seq; // monotonic tie-breaker when two frames share a millisecond
+  final int ts; // wall-clock microseconds, stamped server-side at emission
+  final int? seq; // monotonic tie-breaker when two frames share a microsecond
   final String payload;
 
   const LogFrame({

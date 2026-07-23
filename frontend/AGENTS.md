@@ -90,11 +90,13 @@ proxy to `/api/v1/workflows/:name/deploy|status|inject|log-flags|logs/stream`.
   in `graph_canvas.dart`, collision-checked against existing ids.
 - Launch (JobBar) gates on `POST /workflows/validate` before PUT — a flow
   that fails server validation is neither persisted nor launched.
-- Log flags: `log_in`/`log_out` hot-apply to actor nodes via PATCH, but
-  function-kind nodes compile hooks at deploy — the settings tab shows a
-  "redeploy to apply" hint for function kinds on deployed flows.
-- Log frames carry a monotonic `seq`; the stream view tie-breaks same-ms
-  frames with it.
+- Log flags: `log_in`/`log_out` are runtime-only for ALL node kinds — the
+  engine checks them per message; PATCH hot-applies on deployed flows, no
+  redeploy needed. (`logging_enabled` was removed 2026-07-22.)
+- Log frames carry a wall-clock microsecond `ts` (primary ordering key) and
+  a monotonic `seq`; the stream view sorts by `ts` and tie-breaks same-µs
+  frames with `seq`. Async frames (e.g. http.client.request responses)
+  land in the stream at their emission time.
 
 ### Autosave
 Canvas edits trigger debounced (800ms) `PUT /workflows/{name}` via the autosave
@@ -151,7 +153,7 @@ The Flutter web build is served live at **carta.rancidgrandmas.online** via a Bu
 
 The dev preview proxies `/api/*` to the Carta runtime (`http://localhost:8060`).
 
-**App config:** `cartaclient` app, internal port 8040, directory `/home/gem/projects/CoderyTrailhead/frontend`, command `bun run serve.js`.
+**App config:** `cartaclient` app, internal port 8040, directory `/home/gem/projects/CartaClient/frontend`, command `bun run serve.js`.
 
 **Production** (`carta.rancidgrandmas.online`): served by Bun proxy + Carta runtime.
 
@@ -250,4 +252,4 @@ Theme: **dark** with **slate** variant. Key tokens:
 
 ## Backend
 
-The backend runtime is **Carta** (`/home/gem/projects/THRT`) — an Elixir service that stores workflow YAML and executes node graphs.
+The backend runtime is **Carta** (`/home/gem/projects/Carta`) — an Elixir service that stores workflow YAML and executes node graphs.

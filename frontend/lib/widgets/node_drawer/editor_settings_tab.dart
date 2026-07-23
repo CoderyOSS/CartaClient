@@ -91,15 +91,6 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
     final isHttpRequest = node.kind == 'http.client.request';
     final isPort = node.kind == 'port.in' || node.kind == 'port.out';
 
-    // Deployed truth for the redeploy hint on log toggles: function-kind
-    // nodes compile their log hooks into route_fn at deploy time, so PATCH
-    // toggles are silent no-ops unless hooks were built in. Actors check
-    // flags at runtime and hot-toggle fine.
-    final deployed = ref
-            .watch(flowStatusProvider)[ref.watch(canvasWorkflowProvider).name]
-        ?.deployed ??
-        false;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -391,11 +382,12 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
           ],
 
           // ── Per-node logging section (applies to all node kinds) ──
+          // log_in / log_out are runtime flags checked per message by the
+          // engine — they hot-apply to deployed flows (all node kinds) via
+          // PATCH, no redeploy needed.
           Field(
             label: 'logging',
-            hint: node.loggingEnabled
-                ? 'hooks compiled into route_fn'
-                : 'enable to expose log_in / log_out',
+            hint: 'checked per message at runtime',
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -407,48 +399,25 @@ class _EditorSettingsTabState extends ConsumerState<EditorSettingsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _LogToggle(
-                    label: 'logging_enabled',
-                    description: 'compile log hooks for this node (build-time)',
-                    value: node.loggingEnabled,
-                    onChanged: (v) =>
-                        _updateNode(node.copyWith(loggingEnabled: v)),
+                    label: 'log_in',
+                    description: 'emit on incoming message',
+                    value: node.logIn,
+                    onChanged: (v) {
+                      _updateNode(node.copyWith(logIn: v));
+                      // Hot-toggle the running flow too, if deployed.
+                      _maybeHotToggle(node, logIn: v);
+                    },
                   ),
-                  if (node.loggingEnabled) ...[
-                    const SizedBox(height: 8),
-                    _LogToggle(
-                      label: 'log_in',
-                      description: 'emit on incoming message',
-                      value: node.logIn,
-                      onChanged: (v) {
-                        _updateNode(node.copyWith(logIn: v));
-                        // Hot-toggle the running flow too, if deployed.
-                        _maybeHotToggle(node, logIn: v);
-                      },
-                    ),
-                    const SizedBox(height: 4),
-                    _LogToggle(
-                      label: 'log_out',
-                      description: 'emit on outgoing message',
-                      value: node.logOut,
-                      onChanged: (v) {
-                        _updateNode(node.copyWith(logOut: v));
-                        _maybeHotToggle(node, logOut: v);
-                      },
-                    ),
-                  ],
-                  if (deployed && !node.isActor)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'deployed: function hooks compile at deploy — redeploy to apply',
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 10,
-                          color: AppColors.warning,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 4),
+                  _LogToggle(
+                    label: 'log_out',
+                    description: 'emit on outgoing message',
+                    value: node.logOut,
+                    onChanged: (v) {
+                      _updateNode(node.copyWith(logOut: v));
+                      _maybeHotToggle(node, logOut: v);
+                    },
+                  ),
                 ],
               ),
             ),

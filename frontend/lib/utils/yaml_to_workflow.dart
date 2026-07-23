@@ -137,7 +137,7 @@ WorkflowNode _parseNode(YamlMap stage, int index) {
   if (kind == 'sink.log') {
     throw WorkflowParseException(
       'node "$id" has type "sink.log" which has been removed. '
-      'Logging is now a per-node build-time flag (config.logging_enabled).',
+      'Logging is now per-node runtime flags (config.log_in / config.log_out).',
     );
   }
   final label = _toStr(stage['label']) ?? id;
@@ -184,7 +184,6 @@ WorkflowNode _parseNode(YamlMap stage, int index) {
   String? payloadCode;
   var payloadIsExpr = false;
   bool? once;
-  bool loggingEnabled = false;
   bool logIn = false;
   bool logOut = false;
   Map<String, dynamic>? genericConfig;
@@ -224,7 +223,6 @@ WorkflowNode _parseNode(YamlMap stage, int index) {
     if (kind == 'port.in' || kind == 'port.out') {
       channel = _toStr(config['channel']);
     }
-    loggingEnabled = (config['logging_enabled'] as bool?) ?? false;
     logIn = (config['log_in'] as bool?) ?? false;
     logOut = (config['log_out'] as bool?) ?? false;
 
@@ -347,7 +345,6 @@ WorkflowNode _parseNode(YamlMap stage, int index) {
     payloadCode: payloadCode,
     payloadIsExpr: payloadIsExpr,
     once: once,
-    loggingEnabled: loggingEnabled,
     logIn: logIn,
     logOut: logOut,
     config: genericConfig,

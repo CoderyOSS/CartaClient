@@ -11,7 +11,7 @@
 ## Project Layout
 
 ```
-CoderyTrailhead/
+CartaClient/
 ├── AGENTS.md                       ← This file (repo-level orchestration)
 ├── frontend/                       ← Flutter SPA (web + iOS)
 │   ├── AGENTS.md                   ← Frontend-specific instructions
@@ -20,11 +20,11 @@ CoderyTrailhead/
 └── design/                         ← Design prototype (reference only)
 ```
 
-For frontend work, read `frontend/AGENTS.md`. For the runtime backend, read `/home/gem/projects/THRT/AGENTS.md`.
+For frontend work, read `frontend/AGENTS.md`. For the runtime backend, read `/home/gem/projects/Carta/AGENTS.md`.
 
 ## Runtime Architecture
 
-The runtime engine is **Carta** (`/home/gem/projects/THRT`), an Elixir service
+The runtime engine is **Carta** (`/home/gem/projects/Carta`), an Elixir service
 that stores workflow YAML and executes node graphs. The Flutter frontend at
 `carta.rancidgrandmas.online` is served by a Bun proxy that forwards
 `/api/*` to Carta.
@@ -176,6 +176,37 @@ Deferred. See roadmap.
 
 ## Recently Landed
 
+- **`logging_enabled` removed + http client request/response logging (2026-07-22)**:
+  Root cause of "http node logs the same thing for in and out": actor graph
+  entries are `Runtime.identity` no-ops, so `Engine.exec` logged the same
+  envelope at `:in` and `:out` for every actor — and `http.client.request`
+  was fire-and-forget (`_ = do_request(...)`, response dropped). Fixes,
+  Carta: actor `handle_message` gains a `{:halt, state}` return (message
+  fully handled, engine does NOT auto-continue; the node emits later via
+  `Node.Server.emit/3`). Actor in-instrumentation (bump_in + `:in` frame)
+  moved from `Engine.exec` into `Node.Server.handle_info` (engine skips
+  identity entries) — halted actors count in correctly, emit-driven execs
+  don't double-count. `http.client.request` rewritten: reads the request
+  spec from `env.payload["request"]` (or `:request`; url/method/body/
+  headers, string or atom keys; config url/method as fallback), fires the
+  request in a `Task`, returns `{:halt, state}`, and emits
+  `%{response: %{status:, headers:, body:}}` downstream when the response
+  lands — log_in = `%{request:...}`, log_out = `%{response:...}`, original
+  payload NOT forwarded. Failures route `%{response: %{status: nil,
+  error: msg}}` downstream plus an unconditional `:error` frame
+  (`kind: :http_error`). Log frames now stamp `ts` in wall-clock
+  **microseconds** (was ms) — fine-grained primary ordering; `seq` remains
+  the exact tie-breaker. `logging_enabled` removed completely (it was
+  already inert — `LogFlags` checks `log_in`/`log_out` per message on the
+  hot path): gone from the frontend model/YAML round-trip, the settings
+  tab (log_in/log_out toggles now always visible, both modes), the log
+  drawer gates, `flows/test1.yaml`, and test YAML. The stale "function
+  hooks compile at deploy — redeploy to apply" hint is gone too (flags are
+  runtime-only for ALL node kinds). Frontend bonus fix: `LogStreamView`
+  read `workflowProvider` (wrong buffer in Active job mode) — now
+  `canvasWorkflowProvider`. `mix test` 346 green (new: halt semantics,
+  async emit delivery, request e2e with a local Bandit server, failure
+  routing); `flutter test` 77 green.
 - **Crash visibility + ghost stats + task validation (2026-07-20)**: Root cause
   of "logging broken / no in's or out's on trigger": a user expr that raises
   (e.g. `Kernel.put_in(payload, [:payload, :meta], 1)` on `%{}`) crashed the
@@ -304,7 +335,7 @@ Deferred. See roadmap.
   (Elixir source string, backend-parsed); drawer gets a payload tab with
   syntax highlighting + live server-side validation.
 - **Carta runtime + same-origin proxy (2026-07-15)**: Active runtime is
-  Carta (`/home/gem/projects/THRT`). Frontend served by Bun proxy at
+  Carta (`/home/gem/projects/Carta`). Frontend served by Bun proxy at
   `carta.rancidgrandmas.online`, forwarding `/api/*` to Carta on
   `localhost:8060`. Added Deploy button, Inject dialog, and node
   status badges.
@@ -316,8 +347,8 @@ apps. They are not managed by the host supervisor.
 
 | App | Subdomain | Internal Port | Directory | Command |
 |-----|-----------|---------------|-----------|---------|
-| `cbe1` | (internal) | 8060 | `/home/gem/projects/THRT` | `elixir --sname cbe1 -S mix run --no-halt` |
-| `cartaclient` | `carta.rancidgrandmas.online` | 8040 | `/home/gem/projects/CoderyTrailhead/frontend` | `bun run serve.js` |
+| `cbe1` | (internal) | 8060 | `/home/gem/projects/Carta` | `elixir --sname cbe1 -S mix run --no-halt` |
+| `cartaclient` | `carta.rancidgrandmas.online` | 8040 | `/home/gem/projects/CartaClient/frontend` | `bun run serve.js` |
 
 `cbe1` is the personal Carta Engine instance (cbe1 = Carta Backend Engine #1; future
 instances would be `cbe2`, `cbe3`, etc.). `cartaclient` serves the Flutter build and
@@ -325,9 +356,9 @@ proxies `/api/*` to `cbe1` on `localhost:8060`.
 
 To pick up code changes:
 
-1. `cd /home/gem/projects/THRT && mix compile`
+1. `cd /home/gem/projects/Carta && mix compile`
 2. Restart the `cbe1` Launchy app.
-3. `cd /home/gem/projects/CoderyTrailhead/frontend && ~/projects/flutter/bin/flutter build web --release`
+3. `cd /home/gem/projects/CartaClient/frontend && ~/projects/flutter/bin/flutter build web --release`
 4. Restart the `cartaclient` Launchy app.
 
 ## Store Schema
@@ -368,7 +399,7 @@ curl -s -X POST https://carta.rancidgrandmas.online/api/v1/workflows/hello-world
 **Import workflows from disk (one-time bootstrap or batch load):**
 ```bash
 # Carta.Store expects one YAML file per workflow in FLOWS_DIR.
-cp /path/to/yaml/dir/*.yml /home/gem/projects/THRT/flows/
+cp /path/to/yaml/dir/*.yml /home/gem/projects/Carta/flows/
 ```
 
 ## Testing
@@ -385,7 +416,7 @@ cp /path/to/yaml/dir/*.yml /home/gem/projects/THRT/flows/
 
 **Unit tests:**
 ```bash
-cd /home/gem/projects/THRT
+cd /home/gem/projects/Carta
 mix test
 ```
 
@@ -403,8 +434,8 @@ mix test
    (`wss://carta.rancidgrandmas.online/api/v1/workflows/:name/logs/stream`
    returns 101 + frames). Log hooks are runtime-only: `exec/3` checks
    `log_in`/`log_out` flags on every message; no redeploy needed for toggles.
-   The `logging_enabled` YAML key no longer gates anything (consumed only as
-   seed for runtime flags if present).
+   (`logging_enabled` was removed entirely on 2026-07-22 — see Recently
+   Landed.)
 3. **Client deployment modes** — Two connection models with different CORS requirements:
    - **Web (current)**: Flutter SPA served by Bun proxy → Carta same-origin. No CORS needed. Simplest deployment.
    - **Native iOS (planned)**: App connects directly to Carta like a database client (e.g. MongoDB Compass → remote server). Requires CORS support on Carta. Not yet implemented.
@@ -414,7 +445,7 @@ mix test
 ## File Layout
 
 ```
-CoderyTrailhead/
+CartaClient/
 ├── frontend/                     ← Flutter app
 │   ├── lib/
 │   │   ├── services/
@@ -427,7 +458,7 @@ CoderyTrailhead/
 │   └── serve.js                  ← Bun proxy to Carta
 └── openspec/                     ← design proposals
 
-/home/gem/projects/THRT/          ← active Elixir runtime
+/home/gem/projects/Carta/          ← active Elixir runtime
 ├── lib/carta/
 │   ├── api.ex
 │   ├── engine.ex
@@ -450,7 +481,7 @@ CoderyTrailhead/
 ## For Agents Working on This Code
 
 1. **Frontend changes** go in `frontend/`; never edit `design/` prototype files.
-2. **Runtime changes** go in `/home/gem/projects/THRT/`.
+2. **Runtime changes** go in `/home/gem/projects/Carta/`.
 3. **New node types**: implement the `Carta.Node` behaviour and register in `Carta.Engine`.
 4. **YAML schema changes**: update `Carta.Yaml` + add tests.
 5. **Always test Carta with `mix test`** (app booted — `--no-start` breaks deploy tests).

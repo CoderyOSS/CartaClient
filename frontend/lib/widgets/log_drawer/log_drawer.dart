@@ -6,8 +6,8 @@ import '../../providers/carta_provider.dart';
 import '../../theme/tokens.dart';
 import 'log_stream_view.dart';
 
-/// Log drawer. Selection-agnostic: shows all log points where a node has
-/// `logging_enabled: true` plus the corresponding runtime dir flag on.
+/// Log drawer. Selection-agnostic: shows a log point for every node with a
+/// runtime dir flag on (`log_in` / `log_out` in the node's config).
 ///
 /// Left rail lists every available log point with a visibility toggle
 /// (client-side filter). Right pane shows the aggregated stream of frames
@@ -39,10 +39,9 @@ class _LogDrawerState extends ConsumerState<LogDrawer> {
     final statuses = ref.watch(flowStatusProvider);
     final deployed = statuses[wf.name]?.deployed ?? false;
 
-    // All candidate log points: nodes with loggingEnabled && (logIn || logOut).
+    // All candidate log points: nodes with logIn || logOut.
     final points = <String>{};
     for (final n in wf.nodes) {
-      if (!n.loggingEnabled) continue;
       if (n.logIn) points.add('${n.id}.in');
       if (n.logOut) points.add('${n.id}.out');
     }
@@ -74,7 +73,7 @@ class _LogDrawerState extends ConsumerState<LogDrawer> {
                     ? Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(
-                          'no log points — enable logging_enabled on a node',
+                          'no log points — enable log_in / log_out on a node',
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 10.5,

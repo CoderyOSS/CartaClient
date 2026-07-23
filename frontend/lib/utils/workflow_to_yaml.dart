@@ -136,7 +136,6 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
           node.kind == 'port.in' ||
           node.kind == 'port.out' ||
           (node.kind == 'function' && node.expr != null) ||
-          node.loggingEnabled ||
           node.logIn ||
           node.logOut;
 
@@ -186,7 +185,6 @@ YamlResult workflowToYamlWithLines(WorkflowSummary workflow) {
             configLines.add('      channel: ${_yamlValue(node.channel)}');
           }
         }
-        if (node.loggingEnabled) configLines.add('      logging_enabled: true');
         if (node.logIn) configLines.add('      log_in: true');
         if (node.logOut) configLines.add('      log_out: true');
 

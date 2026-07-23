@@ -33,7 +33,9 @@ class _LogStreamViewState extends ConsumerState<LogStreamView> {
 
   @override
   Widget build(BuildContext context) {
-    final wf = ref.watch(workflowProvider);
+    // canvasWorkflowProvider (job snapshot in Active mode, live workflow in
+    // Build) — must match the flow name LogDrawer used to attach the buffer.
+    final wf = ref.watch(canvasWorkflowProvider);
     final buffers = ref.watch(logBufferProvider);
     final enabled = ref.watch(enabledLogPointsProvider);
 
@@ -45,9 +47,12 @@ class _LogStreamViewState extends ConsumerState<LogStreamView> {
             f.dir == 'error' || enabled.contains('${f.nodeId}.${f.dir}'))
         .toList()
       ..sort((a, b) {
+        // Primary ordering: server-stamped emission timestamp (wall-clock
+        // microseconds) — async frames (e.g. http responses) land in the
+        // stream at their emission time, not their arrival time.
         final byTs = a.ts.compareTo(b.ts);
         if (byTs != 0) return byTs;
-        // Monotonic seq tie-breaks frames in the same millisecond (server
+        // Monotonic seq tie-breaks frames in the same microsecond (server
         // emits it; null = older server without seq — keep arrival order).
         if (a.seq != null && b.seq != null) return a.seq!.compareTo(b.seq!);
         return 0;
@@ -83,8 +88,9 @@ class _FrameLine extends StatelessWidget {
 
   const _FrameLine({required this.frame});
 
-  String _fmtTs(int ms) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+  // ts is wall-clock MICROseconds (server stamps at emission).
+  String _fmtTs(int us) {
+    final dt = DateTime.fromMicrosecondsSinceEpoch(us);
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
     final ss = dt.second.toString().padLeft(2, '0');

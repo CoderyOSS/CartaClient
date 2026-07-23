@@ -78,9 +78,8 @@ class WorkflowNode {
   final bool payloadIsExpr;
   final bool? once;
 
-  // Per-node logging flags. `loggingEnabled` is build-time (codegen emits
-  // hooks only when true). `logIn` / `logOut` are runtime-toggleable.
-  final bool loggingEnabled;
+  // Per-node logging flags, runtime-toggleable (hot-PATCHed to the backend
+  // when the flow is deployed; checked per message by the engine).
   final bool logIn;
   final bool logOut;
 
@@ -151,7 +150,6 @@ class WorkflowNode {
     this.payloadCode,
     this.payloadIsExpr = false,
     this.once,
-    this.loggingEnabled = false,
     this.logIn = false,
     this.logOut = false,
     this.config,
@@ -200,7 +198,6 @@ class WorkflowNode {
     String? payloadCode,
     bool? payloadIsExpr,
     bool? once,
-    bool? loggingEnabled,
     bool? logIn,
     bool? logOut,
     Map<String, dynamic>? config,
@@ -248,7 +245,6 @@ class WorkflowNode {
       payloadCode: payloadCode ?? this.payloadCode,
       payloadIsExpr: payloadIsExpr ?? this.payloadIsExpr,
       once: once ?? this.once,
-      loggingEnabled: loggingEnabled ?? this.loggingEnabled,
       logIn: logIn ?? this.logIn,
       logOut: logOut ?? this.logOut,
       config: config ?? this.config,
