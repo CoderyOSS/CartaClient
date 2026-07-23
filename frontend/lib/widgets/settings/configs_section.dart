@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -231,9 +232,27 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
   // cfg.source and clobber the user's edits — keeping state alive preserves
   // the typed text across collapse/re-expand.
   bool _everExpanded = false;
-  bool _inFlight = false;
-  String? _lastSaved;
-  String? _pending; // latest typed value buffered while a PUT is in flight
+
+  // Debounce saves: PayloadEditor fires onChanged per keystroke; without a
+  // debounce every intermediate (invalid) state would hit the backend and
+  // generate a 400 SnackBar, queuing many toasts during rapid typing. The
+  // timer collapses rapid edits into a single PUT 1.5s after typing stops.
+  Timer? _saveDebounce;
+
+  // Single current error (replaces SnackBar queue). Cleared on next keystroke;
+  // replaced (not appended) on each failed PUT.
+  String? _localError;
+
+  // Tracks the PayloadEditor's pip validity via onValidationChanged. When
+  // false, the save is skipped entirely — saves a backend roundtrip on
+  // intermediate invalid states.
+  bool _isValid = true;
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -295,11 +314,21 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
               offstage: !_expanded,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: PayloadEditor(
-                  key: ValueKey('cfg-${cfg.key}'),
-                  initialCode: cfg.source,
-                  isExpr: false,
-                  onChanged: (source) => _replace(cfg.key, source),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_localError != null) ...[
+                      _errorBanner(_localError!),
+                      const SizedBox(height: 8),
+                    ],
+                    PayloadEditor(
+                      key: ValueKey('cfg-${cfg.key}'),
+                      initialCode: cfg.source,
+                      isExpr: false,
+                      onChanged: (source) => _scheduleSave(cfg.key, source),
+                      onValidationChanged: (ok) => _isValid = ok,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -308,32 +337,60 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
     );
   }
 
-  // Coalesce saves: buffer the latest typed value and drain it after the
-  // in-flight PUT completes, so rapid typing collapses to (at most) one PUT
-  // per value AND the final value is never dropped. PayloadEditor fires
-  // onChanged per controller change; without this it'd be a PUT per keystroke.
-  Future<void> _replace(String key, String source) async {
+  Widget _errorBanner(String msg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.12),
+        border: Border.all(color: AppColors.danger, width: 0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CartaIcon(icon: CartaIconData.alertTriangle, size: 12, color: AppColors.danger),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SelectableText(msg,
+                style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: AppColors.danger,
+                    height: 1.4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Schedule a debounced save. Any keystroke cancels the pending timer and
+  // clears the current error — guarantees only ONE error is shown at a time
+  // (never a queue) and a PUT only fires after the user stops typing for
+  // 1.5s. Skipped entirely when the pip reports the editor invalid.
+  void _scheduleSave(String key, String source) {
+    if (_localError != null) {
+      setState(() => _localError = null);
+    }
+    _saveDebounce?.cancel();
     if (source.trim().isEmpty) return;
-    _pending = source;
-    if (_inFlight) return;
-    _inFlight = true;
+    _saveDebounce = Timer(const Duration(milliseconds: 1500), () => _save(key, source));
+  }
+
+  Future<void> _save(String key, String source) async {
+    if (!_isValid) return;
     try {
-      while (_pending != null && _pending != _lastSaved) {
-        final value = _pending!;
-        _pending = null;
-        await ref.read(configsApiProvider).replace(key, value);
-        _lastSaved = value;
-      }
+      await ref.read(configsApiProvider).replace(key, source);
+      // Invalidate so the cached FutureProvider refetches the latest source.
+      // Without this, reopening settings shows stale source from the cached
+      // list — looks like the save never persisted.
+      ref.invalidate(configsProvider);
+      if (mounted && _localError != null) setState(() => _localError = null);
     } on ConfigsApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: SelectableText('Save failed: $e',
-              style: const TextStyle(fontFamily: 'monospace')),
-          backgroundColor: AppColors.danger,
-        ));
-      }
-    } finally {
-      _inFlight = false;
+      if (!mounted) return;
+      setState(() => _localError = 'Save failed: $e');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _localError = 'Save failed: $e');
     }
   }
 

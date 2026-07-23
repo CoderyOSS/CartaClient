@@ -23,12 +23,18 @@ class PayloadEditor extends ConsumerStatefulWidget {
   /// once at deploy time / per trigger click — never per message.
   final bool isExpr;
 
+  /// Optional: invoked with the latest validity result after each debounced
+  /// server validation. Lets callers gate downstream actions (e.g. skip a
+  /// save when the pip is invalid). Non-breaking for existing callers.
+  final ValueChanged<bool>? onValidationChanged;
+
   const PayloadEditor({
     super.key,
     required this.initialCode,
     required this.onChanged,
     this.triggerSlot,
     this.isExpr = false,
+    this.onValidationChanged,
   });
 
   @override
@@ -42,6 +48,11 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
   bool _isValid = true;
   String? _error;
   int? _errorLine;
+  // Last text seen via _onChanged. CodeController fires its listeners on
+  // internal state changes (selection, focus, rebuild sync) — not just on
+  // text mutations — so without this guard, spurious fires would endlessly
+  // reset the parent's save debounce and prevent the PUT from ever firing.
+  String _lastText = '';
 
   @override
   void initState() {
@@ -50,6 +61,7 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
       text: widget.initialCode,
       language: elixir,
     );
+    _lastText = widget.initialCode;
     _controller.addListener(_onChanged);
     // Initial validation.
     if (widget.initialCode.trim().isNotEmpty) {
@@ -76,7 +88,10 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
   }
 
   void _onChanged() {
-    widget.onChanged(_controller.text);
+    final text = _controller.text;
+    if (text == _lastText) return;
+    _lastText = text;
+    widget.onChanged(text);
     _scheduleValidation();
   }
 
@@ -94,6 +109,7 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
         _errorLine = null;
         _validating = false;
       });
+      widget.onValidationChanged?.call(false);
       return;
     }
 
@@ -110,6 +126,7 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
         _errorLine = result.line;
         _validating = false;
       });
+      widget.onValidationChanged?.call(result.ok);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -117,6 +134,7 @@ class _PayloadEditorState extends ConsumerState<PayloadEditor> {
         _error = 'validation failed (network)';
         _validating = false;
       });
+      widget.onValidationChanged?.call(false);
     }
   }
 
