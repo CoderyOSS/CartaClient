@@ -98,10 +98,10 @@ class UnifiedDrawer extends ConsumerWidget {
               if (viewMode == DrawerViewMode.logs) return logsPane;
               if (viewMode == DrawerViewMode.settings) return settingsPane;
 
-              final logsExtent = total * frac;
               void onSplitDelta(double delta) {
                 if (total <= 0) return;
-                final next = (logsExtent + delta) / total;
+                final curSplit = ref.read(drawerSplitProvider);
+                final next = (total * curSplit + delta) / total;
                 ref.read(drawerSplitProvider.notifier).state =
                     clampDrawerSplit(next, total);
               }
@@ -112,6 +112,7 @@ class UnifiedDrawer extends ConsumerWidget {
                 onEnd: () => scheduleDrawerPrefsSave(ref),
               );
 
+              final logsExtent = total * frac;
               final first = horizontalSplit
                   ? SizedBox(width: logsExtent, child: logsPane)
                   : SizedBox(height: logsExtent, child: logsPane);
@@ -175,8 +176,8 @@ class _DrawerHeader extends ConsumerWidget {
           if (viewMode == DrawerViewMode.both)
             _HeaderIconButton(
               icon: layout == DrawerSplitLayout.horizontal
-                  ? Icons.swap_horiz
-                  : Icons.swap_vert,
+                  ? Icons.swap_vert
+                  : Icons.swap_horiz,
               tooltip: layout == DrawerSplitLayout.horizontal
                   ? 'stack panes vertically'
                   : 'arrange panes side by side',

@@ -43,8 +43,10 @@ void main() {
     // Default view mode is both: settings pane shows the no-selection
     // empty state alongside the logs pane.
     expect(find.text('select a node on the canvas'), findsOneWidget);
-    // Split-direction toggle only visible in both mode.
-    expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+    // Split-direction toggle only visible in both mode. Default layout is
+    // horizontal (side-by-side); the icon shows the action (switch to
+    // vertical/stacked), not the current state.
+    expect(find.byIcon(Icons.swap_vert), findsOneWidget);
   });
 
   testWidgets('switching to logs-only hides the settings pane',
@@ -67,10 +69,10 @@ void main() {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.swap_horiz));
+    await tester.tap(find.byIcon(Icons.swap_vert));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.swap_vert), findsOneWidget);
-    expect(find.byIcon(Icons.swap_horiz), findsNothing);
+    expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+    expect(find.byIcon(Icons.swap_vert), findsNothing);
     // Flush the debounced prefs-save timer (300ms).
     await tester.pump(const Duration(milliseconds: 400));
   });
