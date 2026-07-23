@@ -225,8 +225,15 @@ class _ConfigCard extends ConsumerStatefulWidget {
 
 class _ConfigCardState extends ConsumerState<_ConfigCard> {
   bool _expanded = false;
+  // Mount the PayloadEditor on first expand, then keep it mounted (hidden via
+  // Offstage when collapsed). PayloadEditor binds initialCode in initState
+  // only, so a conditional remount would rebind to a possibly-stale
+  // cfg.source and clobber the user's edits — keeping state alive preserves
+  // the typed text across collapse/re-expand.
+  bool _everExpanded = false;
   bool _inFlight = false;
   String? _lastSaved;
+  String? _pending; // latest typed value buffered while a PUT is in flight
 
   @override
   Widget build(BuildContext context) {
@@ -241,7 +248,10 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () => setState(() {
+              _expanded = !_expanded;
+              if (_expanded) _everExpanded = true;
+            }),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(
@@ -278,14 +288,19 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
               ),
             ),
           ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: PayloadEditor(
-                key: ValueKey('cfg-${cfg.key}'),
-                initialCode: cfg.source,
-                isExpr: false,
-                onChanged: (source) => _replace(cfg.key, source),
+          // Mount the editor once on first expand, then keep it mounted
+          // (Offstage hides it when collapsed). See _everExpanded for why.
+          if (_everExpanded)
+            Offstage(
+              offstage: !_expanded,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: PayloadEditor(
+                  key: ValueKey('cfg-${cfg.key}'),
+                  initialCode: cfg.source,
+                  isExpr: false,
+                  onChanged: (source) => _replace(cfg.key, source),
+                ),
               ),
             ),
         ],
@@ -293,15 +308,22 @@ class _ConfigCardState extends ConsumerState<_ConfigCard> {
     );
   }
 
-  // Coalesce saves: drop keystrokes while a PUT is in flight and skip when
-  // unchanged. PayloadEditor fires onChanged per controller change; this
-  // prevents a PUT per keystroke.
+  // Coalesce saves: buffer the latest typed value and drain it after the
+  // in-flight PUT completes, so rapid typing collapses to (at most) one PUT
+  // per value AND the final value is never dropped. PayloadEditor fires
+  // onChanged per controller change; without this it'd be a PUT per keystroke.
   Future<void> _replace(String key, String source) async {
-    if (source.trim().isEmpty || _inFlight || source == _lastSaved) return;
+    if (source.trim().isEmpty) return;
+    _pending = source;
+    if (_inFlight) return;
     _inFlight = true;
     try {
-      await ref.read(configsApiProvider).replace(key, source);
-      _lastSaved = source;
+      while (_pending != null && _pending != _lastSaved) {
+        final value = _pending!;
+        _pending = null;
+        await ref.read(configsApiProvider).replace(key, value);
+        _lastSaved = value;
+      }
     } on ConfigsApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
