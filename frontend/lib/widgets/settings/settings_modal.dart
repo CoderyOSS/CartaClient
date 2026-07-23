@@ -44,7 +44,7 @@ const _sections = [
   _SectionMeta(value: 'messaging',  label: 'Messaging',  icon: CartaIconData.send),
   _SectionMeta(value: 'modules',    label: 'Modules',    icon: CartaIconData.plug),
   _SectionMeta(value: 'packages',   label: 'Packages',   icon: CartaIconData.globe),
-  _SectionMeta(value: 'configs',    label: 'Configuration Objects', icon: CartaIconData.bookmark),
+  _SectionMeta(value: 'configs',    label: 'Configs', icon: CartaIconData.bookmark),
   _SectionMeta(value: 'instance',   label: 'Instance',   icon: CartaIconData.terminal),
 ];
 
