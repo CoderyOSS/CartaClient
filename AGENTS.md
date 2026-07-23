@@ -8,6 +8,12 @@
 
 # Carta Service - Agent Guide
 
+> **Naming:** "Carta" is the canonical project name. "Trailhead" and "THRT"
+> are legacy references from the original prototype. All new code, configs,
+> and documentation must use "Carta". Old references may persist in
+> `design/` (do-not-edit prototype) and history; update them when found
+> outside those scopes.
+
 ## Project Layout
 
 ```
