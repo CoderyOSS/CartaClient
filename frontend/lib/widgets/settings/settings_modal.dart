@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/icons.dart';
+import 'configs_section.dart';
 import 'instance_section.dart';
 import 'modules_section.dart';
 import 'packages_section.dart';
@@ -43,6 +44,7 @@ const _sections = [
   _SectionMeta(value: 'messaging',  label: 'Messaging',  icon: CartaIconData.send),
   _SectionMeta(value: 'modules',    label: 'Modules',    icon: CartaIconData.plug),
   _SectionMeta(value: 'packages',   label: 'Packages',   icon: CartaIconData.globe),
+  _SectionMeta(value: 'configs',    label: 'Configuration Objects', icon: CartaIconData.bookmark),
   _SectionMeta(value: 'instance',   label: 'Instance',   icon: CartaIconData.terminal),
 ];
 
@@ -392,6 +394,8 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog>
         return const ModulesSection();
       case 'packages':
         return const PackagesSection();
+      case 'configs':
+        return const ConfigsSection();
       case 'instance':
         return const InstanceSection();
       default:
