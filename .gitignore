@@ -18,3 +18,4 @@ graphify-out/*
 !graphify-out/manifest.json
 !graphify-out/.graphify_labels.json
 .superpowers/
+.worktrees/
